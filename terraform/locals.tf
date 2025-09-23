@@ -7,4 +7,5 @@ locals {
     "managed_by" = "terraform"
     "repo"       = local.gh_repo
   }
+  
 }

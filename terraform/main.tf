@@ -12,6 +12,10 @@ terraform {
       source = "azure/azapi"
       version = "=2.3.0"
     }
+    time = {
+      source  = "hashicorp/time"
+      version = "~> 0.13"
+    }
   }
 }
 
@@ -74,6 +78,105 @@ resource "azurerm_subnet" "cluster" {
     }
   
   }
+}
+
+resource "azurerm_subnet" "pe" {
+  name                 = "pe-subnet-${local.loc_for_naming}"
+  resource_group_name  = azurerm_resource_group.rg.name
+  virtual_network_name = azurerm_virtual_network.default.name
+  address_prefixes     = ["172.17.2.0/24"]
+}
+
+resource "azurerm_subnet" "foundry" {
+  name                 = "aifoundry-subnet-${local.loc_for_naming}"
+  resource_group_name  = azurerm_resource_group.rg.name
+  virtual_network_name = azurerm_virtual_network.default.name
+  address_prefixes     = ["172.17.3.0/24"]
+
+  delegation {
+    name = "Microsoft.App/environments"
+    service_delegation {
+      name    = "Microsoft.App/environments"
+      actions = ["Microsoft.Network/virtualNetworks/subnets/join/action"]
+    }
+  
+  }
+}
+
+## Private DNS zones for Private Endpoints
+resource "azurerm_private_dns_zone" "blob" {
+  name                      = "privatelink.blob.core.windows.net"
+  resource_group_name       = azurerm_resource_group.rg.name
+}
+
+resource "azurerm_private_dns_zone_virtual_network_link" "blob" {
+  name                  = "blob"
+  resource_group_name   = azurerm_resource_group.rg.name
+  private_dns_zone_name = azurerm_private_dns_zone.blob.name
+  virtual_network_id    = azurerm_virtual_network.default.id
+}
+
+resource "azurerm_private_dns_zone" "documents" {
+  name                      = "privatelink.documents.azure.com"
+  resource_group_name       = azurerm_resource_group.rg.name
+}
+
+resource "azurerm_private_dns_zone_virtual_network_link" "documents" {
+  name                  = "documents"
+  resource_group_name   = azurerm_resource_group.rg.name
+  private_dns_zone_name = azurerm_private_dns_zone.documents.name
+  virtual_network_id    = azurerm_virtual_network.default.id
+}
+
+resource "azurerm_private_dns_zone" "search" {
+  name                      = "privatelink.search.windows.net"
+  resource_group_name       = azurerm_resource_group.rg.name
+}
+
+resource "azurerm_private_dns_zone_virtual_network_link" "search" {
+  name                  = "search"
+  resource_group_name   = azurerm_resource_group.rg.name
+  private_dns_zone_name = azurerm_private_dns_zone.search.name
+  virtual_network_id    = azurerm_virtual_network.default.id
+}
+
+#privatelink.cognitiveservices.azure.com
+resource "azurerm_private_dns_zone" "cognitiveservices" {
+  name                      = "privatelink.cognitiveservices.azure.com"
+  resource_group_name       = azurerm_resource_group.rg.name
+}
+
+resource "azurerm_private_dns_zone_virtual_network_link" "cognitiveservices" {
+  name                  = "cognitiveservices"
+  resource_group_name   = azurerm_resource_group.rg.name
+  private_dns_zone_name = azurerm_private_dns_zone.cognitiveservices.name
+  virtual_network_id    = azurerm_virtual_network.default.id
+}
+
+#privatelink.services.ai.azure.com
+resource "azurerm_private_dns_zone" "ai_services" {
+  name                      = "privatelink.services.ai.azure.com"
+  resource_group_name       = azurerm_resource_group.rg.name
+}
+
+resource "azurerm_private_dns_zone_virtual_network_link" "ai_services" {
+  name                  = "ai_services"
+  resource_group_name   = azurerm_resource_group.rg.name
+  private_dns_zone_name = azurerm_private_dns_zone.ai_services.name
+  virtual_network_id    = azurerm_virtual_network.default.id
+}
+
+#privatelink.openai.azure.com
+resource "azurerm_private_dns_zone" "openai" {
+  name                      = "privatelink.openai.azure.com"
+  resource_group_name       = azurerm_resource_group.rg.name
+}
+
+resource "azurerm_private_dns_zone_virtual_network_link" "openai" {
+  name                  = "openai"
+  resource_group_name   = azurerm_resource_group.rg.name
+  private_dns_zone_name = azurerm_private_dns_zone.openai.name
+  virtual_network_id    = azurerm_virtual_network.default.id
 }
 
 # create NSG for the subnet
@@ -170,17 +273,12 @@ resource "azurerm_role_assignment" "reader" {
   principal_id         = azurerm_user_assigned_identity.this.principal_id
 }
 
-# resource "azurerm_role_assignment" "Contributor" {
-#   scope                = var.ai_foundry_rg_id
-#   role_definition_name = "Contributor"
-#   principal_id         = azurerm_user_assigned_identity.this.principal_id
-# }
 
-# resource "azurerm_role_assignment" "aiuser" {
-#   scope                = var.ai_foundry_rg_id
-#   role_definition_name = "Azure AI User"
-#   principal_id         = azurerm_user_assigned_identity.this.principal_id
-# }
+resource "azurerm_role_assignment" "aiuser" {
+  scope                = azapi_resource.ai_foundry.id
+  role_definition_name = "Azure AI User"
+  principal_id         = azurerm_user_assigned_identity.this.principal_id
+}
 
 resource "azurerm_container_app_environment" "this" {
   name                       = "ace-${local.func_name}"
@@ -232,6 +330,15 @@ resource "azurerm_container_app" "agent" {
         name = "CLIENT_ID"
         value = azurerm_user_assigned_identity.bot.client_id
       }
+      env {
+        name = "tenantId"
+        value = data.azurerm_client_config.current.tenant_id
+      }
+
+      env {
+        name = "clientId"
+        value = azurerm_user_assigned_identity.bot.client_id
+      }
 
       env {
         name = "AZURE_CLIENT_ID"
@@ -245,7 +352,7 @@ resource "azurerm_container_app" "agent" {
       name                = "http-1"
       concurrent_requests = "100"
     }
-    min_replicas = 0
+    min_replicas = 1
     max_replicas = 1
   }
 
