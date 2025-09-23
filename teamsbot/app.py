@@ -7,10 +7,13 @@ from microsoft_agents.hosting.core import (
 )
 from microsoft_agents.hosting.aiohttp import CloudAdapter
 from start_server import start_server
+from config import DefaultConfig
 
 AGENT_APP = AgentApplication[TurnState](
     storage=MemoryStorage(), adapter=CloudAdapter()
 )
+
+AGENT_CONFIG = DefaultConfig()
 
 async def _help(context: TurnContext, _: TurnState):
     await context.send_activity(
@@ -29,6 +32,6 @@ async def on_message(context: TurnContext, _):
 
 if __name__ == "__main__":
     try:
-        start_server(AGENT_APP, None)
+        start_server(AGENT_APP, AGENT_CONFIG)
     except Exception as error:
         raise error

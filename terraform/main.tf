@@ -224,12 +224,12 @@ resource "azurerm_container_app" "agent" {
       }
 
       env {
-        name = "tenantId"
-        value = var.bot_tenant_id
+        name = "TENANT_ID"
+        value = data.azurerm_client_config.current.tenant_id
       }
 
       env {
-        name = "clientId"
+        name = "CLIENT_ID"
         value = azurerm_user_assigned_identity.bot.client_id
       }
 
