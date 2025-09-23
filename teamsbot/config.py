@@ -1,8 +1,8 @@
 from os import environ
-from microsoft_agents.hosting.core import AuthTypes, AgentAuthConfiguration
+from microsoft_agents.authentication.msal import AuthTypes, MsalAuthConfiguration
 
 
-class DefaultConfig(AgentAuthConfiguration):
+class DefaultConfig(MsalAuthConfiguration):
     """Teams Agent Configuration"""
 
     def __init__(self) -> None:
