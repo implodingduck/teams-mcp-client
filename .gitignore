@@ -39,3 +39,4 @@ terraform.rc
 .env
 
 *.pyc
+manifest.json
