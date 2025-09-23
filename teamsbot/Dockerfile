@@ -1,13 +1,17 @@
-FROM python:3.12
+FROM node:22
 
-RUN apt-get update && apt-get install -y curl tcpdump net-tools vim
+RUN apt-get update && apt-get install -y tcpdump
 
-WORKDIR /code
+WORKDIR /app
 
-COPY ./requirements.txt /code/requirements.txt
+COPY package.json /app/package.json
 
-RUN pip install --no-cache-dir --upgrade -r /code/requirements.txt
+RUN npm install
 
-COPY . /code/app
+COPY . /app
 
-CMD ["python", "-u", "/code/app/app.py"]
+RUN npm run build
+
+EXPOSE 3978
+
+ENTRYPOINT [ "/app/entry.sh" ]

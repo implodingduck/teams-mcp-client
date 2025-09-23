@@ -345,6 +345,16 @@ resource "azurerm_container_app" "agent" {
         value = azurerm_user_assigned_identity.this.client_id
       }
 
+      env {
+        name = "AI_FOUNDRY_ENDPOINT"
+        value = azapi_resource.ai_foundry.properties["endpoint"]
+      }
+
+      env {
+        name = "AI_FOUNDRY_MODEL"
+        value = azurerm_cognitive_deployment.aifoundry_deployment_gpt_4o.name
+      }
+
       
      
     }

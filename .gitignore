@@ -40,3 +40,5 @@ terraform.rc
 
 *.pyc
 manifest.json
+
+*/node_modules/**
