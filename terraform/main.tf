@@ -351,7 +351,7 @@ resource "azurerm_container_app" "agent" {
 
       env {
         name = "AI_FOUNDRY_ENDPOINT"
-        value = "https://${azapi_resource.ai_foundry.name}.services.ai.azure.com/"
+        value = "https://${azapi_resource.ai_foundry.name}.services.ai.azure.com/api/projects/${azapi_resource.ai_foundry_project.name}"
       }
 
       env {

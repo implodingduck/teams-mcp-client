@@ -5,13 +5,13 @@ import { TurnState, MemoryStorage, TurnContext, AgentApplication, AttachmentDown
 import { version } from '@microsoft/agents-hosting/package.json'
 import { ActivityTypes } from '@microsoft/agents-activity'
 import type {
-  MessageContent,
-  MessageTextContent,
-  SubmitToolApprovalAction,
-  RequiredMcpToolCall,
-  ThreadMessage,
-  ToolApproval,
-  RunStepToolCallDetails,
+    MessageContent,
+    MessageTextContent,
+    SubmitToolApprovalAction,
+    RequiredMcpToolCall,
+    ThreadMessage,
+    ToolApproval,
+    RunStepToolCallDetails,
 } from "@azure/ai-agents";
 import { AgentsClient, ToolSet, isOutputOfType } from "@azure/ai-agents";
 import { AIProjectClient } from "@azure/ai-projects";
@@ -21,7 +21,9 @@ import { stat } from 'fs';
 // Define the shape of the conversation state
 interface ConversationState {
     count: number;
-    threadId?: string; // Optional thread ID for tracking conversation threads
+    threadId?: string; // Optional thread ID for tracking conversation 
+    agentId?: string; // Optional agent ID for the AI Foundry agent
+    toolSet?: ToolSet; // Optional toolset for the agent
 }
 // Alias for the application turn state
 type ApplicationTurnState = TurnState<ConversationState>
@@ -149,13 +151,16 @@ const initializeAIFoundryAgent = async (context: TurnContext, state: Application
 
     // Create agent with MCP tool
     const agent = await client.createAgent(modelDeploymentName, {
-        name: "my-mcp-agent",
+        // name formated as YYYY-MM-DD-HH-mm
+        name: `teams-agent-${new Date().toISOString().replace(/[:.]/g, '-')}`,
         instructions:
-        "You are a helpful agent that can use MCP tools to assist users. Use the available MCP tools to answer questions and perform tasks.",
+            "You are a helpful agent that can use MCP tools to assist users. Use the available MCP tools to answer questions and perform tasks.",
         // tools: mcpTools.map((tool) => tool.definition),
         tools: toolSet.toolDefinitions,
     });
     console.log(`Created agent, agent ID : ${agent.id}`);
+    state.conversation.agentId = agent.id;
+    state.conversation.toolSet = toolSet;
 }
 
 // Welcome message when a new member is added to the conversation
@@ -166,6 +171,28 @@ agentApp.onConversationUpdate('membersAdded', async (context: TurnContext, state
     await status(context, state)
 })
 
+const removeFoundryAgent = async (context: TurnContext, state: ApplicationTurnState) => {
+    const agentId = state.conversation.agentId;
+    if (!agentId) {
+        console.log('No agent ID found, skipping removal');
+        return;
+    }
+
+    const projectEndpoint = String(process.env['AI_FOUNDRY_ENDPOINT']);
+    const client = new AgentsClient(projectEndpoint, new DefaultAzureCredential());
+
+    try {
+        await client.deleteAgent(agentId);
+        console.log(`Deleted agent, agent ID : ${agentId}`);
+    } catch (error) {
+        console.error(`Failed to delete agent, agent ID : ${agentId}`, error);
+    }
+}
+
+agentApp.onConversationUpdate('membersRemoved', async (context: TurnContext, state: ApplicationTurnState) => {
+    console.log('Member removed from conversation, cleaning up any associated agent')
+    await removeFoundryAgent(context, state);
+})
 
 // Handler for activities whose type matches the regex /^message/
 agentApp.onMessage(/^message/, async (context: TurnContext, state: ApplicationTurnState) => {
@@ -198,6 +225,126 @@ agentApp.onActivity(ActivityTypes.Message, async (context: TurnContext, state: A
     let count = state.conversation.count ?? 0
     state.conversation.count = ++count
 
+    const agentId = state.conversation.agentId;
+    const projectEndpoint = String(process.env['AI_FOUNDRY_ENDPOINT']);
+    const modelDeploymentName = String(process.env['AI_FOUNDRY_MODEL']);
+    const client = new AgentsClient(projectEndpoint, new DefaultAzureCredential());
+
+    if (!agentId) {
+        await context.sendActivity('No agent found for this conversation. Please start a new conversation.')
+        return;
+    }
+
+    const toolSet = state.conversation.toolSet;
+    if (!toolSet) {
+        await context.sendActivity('No toolset found for this conversation. Please start a new conversation.')
+        return;
+    }
+
+    // Create thread for communication
+    const thread = await client.threads.create();
+    console.log(`Created thread, thread ID: ${thread.id}`);
+
+    // Create message to thread
+    const message = await client.messages.create(
+        thread.id,
+        "user",
+        "Please summarize the Azure REST API specifications Readme and Give me the Azure CLI commands to create an Azure Container App with a managed identity",
+    );
+    console.log(`Created message, message ID: ${message.id}`);
+    let run = await client.runs.create(thread.id, agentId, {
+        toolResources: toolSet.toolResources,
+    });
+    console.log(`Created run, run ID: ${run.id}`);
+
+    // Poll the run status
+    while (
+        run.status === "queued" ||
+        run.status === "in_progress" ||
+        run.status === "requires_action"
+    ) {
+        await sleep(1000);
+        run = await client.runs.get(thread.id, run.id);
+
+        if (
+            run.status === "requires_action" &&
+            run.requiredAction &&
+            isOutputOfType<SubmitToolApprovalAction>(run.requiredAction, "submit_tool_approval")
+        ) {
+            const toolCalls = run.requiredAction.submitToolApproval.toolCalls;
+
+            if (!toolCalls?.length) {
+                console.log("No tool calls provided - cancelling run");
+                await client.runs.cancel(thread.id, run.id);
+                break;
+            }
+
+            const toolApprovals: ToolApproval[] = [];
+
+            for (const toolCall of toolCalls) {
+                console.log(`Approving tool call: ${JSON.stringify(toolCall)}`);
+                if (isOutputOfType<RequiredMcpToolCall>(toolCall, "mcp")) {
+                    toolApprovals.push({
+                        toolCallId: toolCall.id,
+                        approve: true,
+                        headers: {
+                            "SuperSecret": "123456"
+                        },
+                    });
+                }
+            }
+
+            console.log(`Tool approvals: ${JSON.stringify(toolApprovals)}`);
+            if (toolApprovals.length > 0) {
+                await client.runs.submitToolOutputs(thread.id, run.id, [], {
+                    toolApprovals: toolApprovals,
+                });
+            }
+        }
+    }
+
+    console.log(`Current run status: ${run.status}`);
+    if (run.status === "failed") {
+        console.log(`Run failed: ${run.lastError}`);
+    }
+
+    // Display run steps and tool calls
+    const runStepsIterator = client.runSteps.list(thread.id, run.id);
+    console.log("\nRun Steps:");
+
+    for await (const step of runStepsIterator) {
+        console.log(`Step ${step.id} status: ${step.status}`);
+
+        // Check if there are tool calls in the step details
+        if (isOutputOfType<RunStepToolCallDetails>(step.stepDetails, "tool_calls")) {
+            const toolCalls = step.stepDetails.toolCalls;
+
+            console.log("  MCP Tool calls:");
+            for (const call of toolCalls) {
+                console.log(`Tool Call ID: ${call.id}`);
+                console.log(`Type: ${call.type}`);
+            }
+        }
+    }
+
+    // Fetch and log all messages
+    console.log("\nConversation:");
+    console.log("-".repeat(50));
+
+    const messagesIterator = client.messages.list(thread.id);
+    const messages: ThreadMessage[] = [];
+
+    for await (const msg of messagesIterator) {
+        messages.unshift(msg); // Add to beginning to maintain chronological order
+    }
+
+    for (const msg of messages) {
+        const messageContent: MessageContent = msg.content[0];
+        if (isOutputOfType<MessageTextContent>(messageContent, "text")) {
+            console.log(`${msg.role.toUpperCase()}: ${messageContent.text.value}`);
+            console.log("-".repeat(50));
+        }
+    }
 
     await context.sendActivity(`[${count}] echoing: ${context.activity.text}`)
 })
