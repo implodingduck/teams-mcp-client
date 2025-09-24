@@ -218,6 +218,9 @@ agentApp.onMessage(/^\/base64url/, async (context: TurnContext, state: Applicati
     }
 })
 
+async function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 // Generic message handler: increments count and echoes the user's message
 agentApp.onActivity(ActivityTypes.Message, async (context: TurnContext, state: ApplicationTurnState) => {
