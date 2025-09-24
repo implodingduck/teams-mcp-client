@@ -245,8 +245,18 @@ agentApp.onActivity(ActivityTypes.Message, async (context: TurnContext, state: A
     }
 
     // Create thread for communication
-    const thread = await client.threads.create();
-    console.log(`Created thread, thread ID: ${thread.id}`);
+    
+    
+    const thread = (state.conversation.threadId)
+            ? await client.threads.get(state.conversation.threadId)
+            : await client.threads.create();
+        if (!thread) {
+            // If thread retrieval/creation fails, log and notify user
+            console.error("Failed to retrieve or create thread.");
+            await context.sendActivity("Error: Unable to retrieve or create thread.");
+        }
+    console.log(`Using thread, thread ID: ${thread.id}`);
+    state.conversation.threadId = thread.id;
 
     // Create message to thread
     const message = await client.messages.create(
@@ -308,7 +318,7 @@ agentApp.onActivity(ActivityTypes.Message, async (context: TurnContext, state: A
 
     console.log(`Current run status: ${run.status}`);
     if (run.status === "failed") {
-        console.log(`Run failed: ${run.lastError}`);
+        console.log(`Run failed: ${JSON.stringify(run.lastError)}`);
     }
 
     // Display run steps and tool calls
