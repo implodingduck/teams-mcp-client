@@ -130,8 +130,8 @@ agentApp.onMessage('/runtime', async (context: TurnContext, state: ApplicationTu
 
 
 const initializeAIFoundryAgent = async (context: TurnContext, state: ApplicationTurnState) => {
-    const projectEndpoint = process.env['AI_FOUNDRY_ENDPOINT'];
-    const modelDeploymentName = process.env['AI_FOUNDRY_MODEL'];
+    const projectEndpoint = String(process.env['AI_FOUNDRY_ENDPOINT']);
+    const modelDeploymentName = String(process.env['AI_FOUNDRY_MODEL']);
     const client = new AgentsClient(projectEndpoint, new DefaultAzureCredential());
     const toolSet = new ToolSet();
     toolSet.addMCPTool({

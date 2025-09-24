@@ -17,3 +17,4 @@ test
 /node_modules/typescript
 /appPackage/
 /infra/
+package-lock.json

@@ -1,6 +1,6 @@
-docker build -t secure-bot-service .
+docker build -t teams-mcp-client .
 
-docker stop secure-bot-service
-docker rm secure-bot-service
+docker stop teams-mcp-client
+docker rm teams-mcp-client
 
-docker run --env-file .env -p 3978:3978 --name secure-bot-service secure-bot-service
+docker run --env-file .env -p 3978:3978 --name teams-mcp-client teams-mcp-client
