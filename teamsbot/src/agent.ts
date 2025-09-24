@@ -167,8 +167,8 @@ const initializeAIFoundryAgent = async (context: TurnContext, state: Application
 // using this to signal the initial start of the bot
 agentApp.onConversationUpdate('membersAdded', async (context: TurnContext, state: ApplicationTurnState) => {
     await initializeAIFoundryAgent(context, state);
-    await context.sendActivity('Hello from the Teams MCP Client running Agents SDK version: ' + version)
-    await status(context, state)
+    await context.sendActivity('Hello from the Teams MCP Client running Agents SDK version: ' + version, { inputHint: 'Please summarize the Azure REST API specifications Readme and Give me the Azure CLI commands to create an Azure Container App with a managed identity' });
+    //await status(context, state)
 })
 
 const removeFoundryAgent = async (context: TurnContext, state: ApplicationTurnState) => {
@@ -262,14 +262,14 @@ agentApp.onActivity(ActivityTypes.Message, async (context: TurnContext, state: A
     const message = await client.messages.create(
         thread.id,
         "user",
-        "Please summarize the Azure REST API specifications Readme and Give me the Azure CLI commands to create an Azure Container App with a managed identity",
+        `${context.activity.text}`,
     );
     console.log(`Created message, message ID: ${message.id}`);
     let run = await client.runs.create(thread.id, agentId, {
         toolResources: toolSet.toolResources,
     });
     console.log(`Created run, run ID: ${run.id}`);
-
+    await context.streamingResponse.queueInformativeUpdate('starting process...')
     // Poll the run status
     while (
         run.status === "queued" ||
@@ -340,6 +340,8 @@ agentApp.onActivity(ActivityTypes.Message, async (context: TurnContext, state: A
         }
     }
 
+    context.streamingResponse.setFeedbackLoop(true)
+    context.streamingResponse.setGeneratedByAILabel(true)
     // Fetch and log all messages
     console.log("\nConversation:");
     console.log("-".repeat(50));
@@ -355,9 +357,10 @@ agentApp.onActivity(ActivityTypes.Message, async (context: TurnContext, state: A
         const messageContent: MessageContent = msg.content[0];
         if (isOutputOfType<MessageTextContent>(messageContent, "text")) {
             console.log(`${msg.role.toUpperCase()}: ${messageContent.text.value}`);
+            await context.streamingResponse.queueMessagePart(messageContent.text.value + "\n")
             console.log("-".repeat(50));
         }
     }
 
-    await context.sendActivity(`[${count}] echoing: ${context.activity.text}`)
+    //await context.sendActivity(`[${count}] echoing: ${context.activity.text}`)
 })
