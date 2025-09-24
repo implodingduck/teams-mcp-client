@@ -167,7 +167,7 @@ const initializeAIFoundryAgent = async (context: TurnContext, state: Application
 // using this to signal the initial start of the bot
 agentApp.onConversationUpdate('membersAdded', async (context: TurnContext, state: ApplicationTurnState) => {
     await initializeAIFoundryAgent(context, state);
-    await context.sendActivity('Hello from the Teams MCP Client running Agents SDK version: ' + version, { inputHint: 'Please summarize the Azure REST API specifications Readme and Give me the Azure CLI commands to create an Azure Container App with a managed identity' });
+    await context.sendActivity('Hello from the Teams MCP Client running Agents SDK version: ' + version, "", "Please summarize the Azure REST API specifications Readme and Give me the Azure CLI commands to create an Azure Container App with a managed identity");
     //await status(context, state)
 })
 
@@ -362,7 +362,7 @@ agentApp.onActivity(ActivityTypes.Message, async (context: TurnContext, state: A
         const messageContent: MessageContent = msg.content[0];
         if (isOutputOfType<MessageTextContent>(messageContent, "text")) {
             console.log(`${msg.role.toUpperCase()}: ${messageContent.text.value}`);
-            await context.streamingResponse.queueMessagePart(messageContent.text.value + "\n")
+            await context.streamingResponse.queueTextChunk(messageContent.text.value + "\n")
             console.log("-".repeat(50));
         }
     }
