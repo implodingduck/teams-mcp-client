@@ -16,6 +16,10 @@ terraform {
       source  = "hashicorp/time"
       version = "~> 0.13"
     }
+    azuread = {
+      source  = "hashicorp/azuread"
+      version = "~> 2.53.1"
+    }
   }
 }
 
@@ -347,7 +351,7 @@ resource "azurerm_container_app" "agent" {
 
       env {
         name = "AI_FOUNDRY_ENDPOINT"
-        value = azapi_resource.ai_foundry.properties["endpoint"]
+        value = "https://${azapi_resource.ai_foundry.name}.services.ai.azure.com/"
       }
 
       env {
@@ -355,6 +359,15 @@ resource "azurerm_container_app" "agent" {
         value = azurerm_cognitive_deployment.aifoundry_deployment_gpt_4o.name
       }
 
+      env {
+        name = "AI_FOUNDRY_CLIENT_ID"
+        value = azurerm_user_assigned_identity.this.client_id
+      }
+
+      env{
+        name = "graph_connectionName"
+        value = "graph"
+      }
       
      
     }
@@ -411,4 +424,19 @@ resource "azurerm_bot_channel_ms_teams" "teams" {
   bot_name            = azurerm_bot_service_azure_bot.teamsbot.name
   location            = azurerm_bot_service_azure_bot.teamsbot.location
   resource_group_name = azurerm_resource_group.rg.name
+}
+
+
+resource "azurerm_bot_connection" "graph" {
+  name                  = "graph"
+  bot_name              = azurerm_bot_service_azure_bot.teamsbot.name
+  location              = azurerm_bot_service_azure_bot.teamsbot.location
+  resource_group_name   = azurerm_resource_group.rg.name
+  service_provider_name = "Aadv2"
+  client_id             = azuread_application.teams-mcp-client-graph.client_id
+  client_secret         = azuread_application_password.this.value
+  scopes = "openid profile User.Read"
+  parameters = {
+    tenantId = data.azurerm_client_config.current.tenant_id
+  }
 }
