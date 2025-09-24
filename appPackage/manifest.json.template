@@ -1,10 +1,10 @@
 {
-  "$schema": "https://developer.microsoft.com/en-us/json-schemas/teams/v1.22/MicrosoftTeams.schema.json",
-  "manifestVersion": "1.22",
+  "$schema": "https://developer.microsoft.com/en-us/json-schemas/teams/v1.23/MicrosoftTeams.schema.json",
+  "manifestVersion": "1.23",
   "id": "${{TEAMS_APP_ID}}",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "developer": {
-    "name": "Teams MCP Client",
+    "name": "implodingduck",
     "websiteUrl": "https://github.com/implodingduck/teams-mcp-client",
     "privacyUrl": "https://github.com/implodingduck/teams-mcp-client",
     "termsOfUseUrl": "https://github.com/implodingduck/teams-mcp-client"
@@ -14,8 +14,8 @@
     "outline": "outline.png"
   },
   "name": {
-    "short": "Teams MCP Client",
-    "full": "Interact with MCP tools from Microsoft Teams"
+    "short": "teams-mcp-client",
+    "full": "Teams MCP Client"
   },
   "description": {
     "short": "Interact with MCP tools from Microsoft Teams.",
@@ -30,8 +30,26 @@
         } 
     ]
   },
+  "bots": [
+    {
+      "botId": "${{BOT_ID}}",
+      "scopes": ["personal", "team"],
+      "isNotificationOnly": false,
+      "supportsCalling": false,
+      "supportsVideo": false,
+      "supportsFiles": false
+    }
+  ],
   "permissions": [
     "identity",
     "messageTeamMembers"
-  ]
+  ],
+  "validDomains": [
+    "${{BOT_DOMAIN}}",
+    "*.botframework.com"
+  ],
+  "webApplicationInfo": {
+    "id": "${{BOT_ID}}",
+    "resource": "api://botid-${{BOT_ID}}"
+  }
 }

@@ -17,7 +17,7 @@
     "test": "npm-run-all -p -r start:anon test-tool"
   },
   "dependencies": {
-    "@azure/ai-agents": "^1.0.0",
+    "@azure/ai-agents": "^1.1.0",
     "@azure/ai-projects": "^1.0.0-beta.10",
     "@azure/identity": "^4.10.2",
     "@microsoft/agents-hosting": "^1.0.0",

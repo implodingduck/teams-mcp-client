@@ -42,3 +42,5 @@ terraform.rc
 manifest.json
 
 */node_modules/**
+
+*appPackage/build/**

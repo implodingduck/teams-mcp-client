@@ -4,6 +4,16 @@ import { TurnState, MemoryStorage, TurnContext, AgentApplication, AttachmentDown
     from '@microsoft/agents-hosting'
 import { version } from '@microsoft/agents-hosting/package.json'
 import { ActivityTypes } from '@microsoft/agents-activity'
+import type {
+  MessageContent,
+  MessageTextContent,
+  SubmitToolApprovalAction,
+  RequiredMcpToolCall,
+  ThreadMessage,
+  ToolApproval,
+  RunStepToolCallDetails,
+} from "@azure/ai-agents";
+import { AgentsClient, ToolSet, isOutputOfType } from "@azure/ai-agents";
 import { AIProjectClient } from "@azure/ai-projects";
 import { DefaultAzureCredential } from "@azure/identity";
 import { stat } from 'fs';
@@ -119,9 +129,40 @@ agentApp.onMessage('/runtime', async (context: TurnContext, state: ApplicationTu
 })
 
 
+const initializeAIFoundryAgent = async (context: TurnContext, state: ApplicationTurnState) => {
+    const projectEndpoint = process.env['AI_FOUNDRY_ENDPOINT'];
+    const modelDeploymentName = process.env['AI_FOUNDRY_MODEL'];
+    const client = new AgentsClient(projectEndpoint, new DefaultAzureCredential());
+    const toolSet = new ToolSet();
+    toolSet.addMCPTool({
+        serverLabel: "github",
+        serverUrl: "https://gitmcp.io/Azure/azure-rest-api-specs",
+        allowedTools: ["search_azure_rest_api_code"], // Optional: specify allowed tools
+    });
+    // You can also add or remove allowed tools dynamically
+
+    toolSet.addMCPTool({
+        serverLabel: "microsoft_learn",
+        serverUrl: "https://learn.microsoft.com/api/mcp",
+        allowedTools: ["microsoft_docs_search"], // Optional: specify allowed tools
+    });
+
+    // Create agent with MCP tool
+    const agent = await client.createAgent(modelDeploymentName, {
+        name: "my-mcp-agent",
+        instructions:
+        "You are a helpful agent that can use MCP tools to assist users. Use the available MCP tools to answer questions and perform tasks.",
+        // tools: mcpTools.map((tool) => tool.definition),
+        tools: toolSet.toolDefinitions,
+    });
+    console.log(`Created agent, agent ID : ${agent.id}`);
+}
+
 // Welcome message when a new member is added to the conversation
+// using this to signal the initial start of the bot
 agentApp.onConversationUpdate('membersAdded', async (context: TurnContext, state: ApplicationTurnState) => {
-    await context.sendActivity('Hello from the Secure Bot Agent running Agents SDK version: ' + version)
+    await initializeAIFoundryAgent(context, state);
+    await context.sendActivity('Hello from the Teams MCP Client running Agents SDK version: ' + version)
     await status(context, state)
 })
 
