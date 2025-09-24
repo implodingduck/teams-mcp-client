@@ -194,6 +194,11 @@ agentApp.onConversationUpdate('membersRemoved', async (context: TurnContext, sta
     await removeFoundryAgent(context, state);
 })
 
+agentApp.onActivity(ActivityTypes.EndOfConversation, async (context: TurnContext, state: ApplicationTurnState) => {
+    console.log('End of conversation activity received, cleaning up any associated agent')
+    await removeFoundryAgent(context, state);
+})
+
 // Handler for activities whose type matches the regex /^message/
 agentApp.onMessage(/^message/, async (context: TurnContext, state: ApplicationTurnState) => {
     await context.sendActivity(`Matched with regex: ${context.activity.type}`)
