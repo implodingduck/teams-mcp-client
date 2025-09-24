@@ -366,6 +366,7 @@ agentApp.onActivity(ActivityTypes.Message, async (context: TurnContext, state: A
             console.log("-".repeat(50));
         }
     }
+    await context.streamingResponse.endStream()
 
     //await context.sendActivity(`[${count}] echoing: ${context.activity.text}`)
 })
