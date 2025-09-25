@@ -274,7 +274,7 @@ agentApp.onActivity(ActivityTypes.Message, async (context: TurnContext, state: A
         toolResources: toolSet.toolResources,
     });
     console.log(`Created run, run ID: ${run.id}`);
-    await context.streamingResponse.queueInformativeUpdate('starting process...')
+    
     // Poll the run status
     while (
         run.status === "queued" ||
