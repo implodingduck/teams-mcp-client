@@ -422,7 +422,10 @@ agentApp.onActivity(ActivityTypes.Message, async (context: TurnContext, state: A
                     }
                 }
                 break;
-
+            case RunStreamEvent.ThreadRunRequiresAction:
+                const threadRun = eventMessage.data as ThreadRun;
+                console.log(`Thread Run Required Action: ${JSON.stringify(threadRun)}`);
+                break;
             case RunStreamEvent.ThreadRunCompleted:
                 console.log("Thread Run Completed");
                 break;
