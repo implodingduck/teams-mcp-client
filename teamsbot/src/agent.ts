@@ -4,7 +4,7 @@ import { TurnState, MemoryStorage, TurnContext, AgentApplication, AttachmentDown
     from '@microsoft/agents-hosting'
 import { version } from '@microsoft/agents-hosting/package.json'
 import { ActivityTypes } from '@microsoft/agents-activity'
-import type {
+import {
     MessageContent,
     MessageTextContent,
     SubmitToolApprovalAction,
@@ -12,6 +12,11 @@ import type {
     ThreadMessage,
     ToolApproval,
     RunStepToolCallDetails,
+    MessageStreamEvent,
+    RunStreamEvent,
+    type ThreadRun,
+    type MessageDeltaChunk,
+    type MessageDeltaTextContent,
 } from "@azure/ai-agents";
 import { AgentsClient, ToolSet, isOutputOfType } from "@azure/ai-agents";
 import { AIProjectClient } from "@azure/ai-projects";
@@ -225,7 +230,7 @@ agentApp.onMessage(/^\/base64url/, async (context: TurnContext, state: Applicati
 })
 
 async function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+    return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 // Generic message handler: increments count and echoes the user's message
@@ -251,23 +256,23 @@ agentApp.onActivity(ActivityTypes.Message, async (context: TurnContext, state: A
         return;
     }
 
-    
+
     if (!toolSet) {
         await context.sendActivity('No toolset found for this conversation. Please start a new conversation.')
         return;
     }
 
     // Create thread for communication
-    
-    
+
+
     const thread = (state.conversation.threadId)
-            ? await client.threads.get(state.conversation.threadId)
-            : await client.threads.create();
-        if (!thread) {
-            // If thread retrieval/creation fails, log and notify user
-            console.error("Failed to retrieve or create thread.");
-            await context.sendActivity("Error: Unable to retrieve or create thread.");
-        }
+        ? await client.threads.get(state.conversation.threadId)
+        : await client.threads.create();
+    if (!thread) {
+        // If thread retrieval/creation fails, log and notify user
+        console.error("Failed to retrieve or create thread.");
+        await context.sendActivity("Error: Unable to retrieve or create thread.");
+    }
     console.log(`Using thread, thread ID: ${thread.id}`);
     state.conversation.threadId = thread.id;
 
@@ -278,104 +283,161 @@ agentApp.onActivity(ActivityTypes.Message, async (context: TurnContext, state: A
         `${context.activity.text}`,
     );
     console.log(`Created message, message ID: ${message.id}`);
-    let run = await client.runs.create(thread.id, agentId, {
+
+    // Non-streaming return results
+    // let run = await client.runs.create(thread.id, agentId, {
+    //     toolResources: toolSet.toolResources,
+    // });
+    // console.log(`Created run, run ID: ${run.id}`);
+
+    // // Poll the run status
+    // while (
+    //     run.status === "queued" ||
+    //     run.status === "in_progress" ||
+    //     run.status === "requires_action"
+    // ) {
+    //     await sleep(1000);
+    //     run = await client.runs.get(thread.id, run.id);
+
+    //     if (
+    //         run.status === "requires_action" &&
+    //         run.requiredAction &&
+    //         isOutputOfType<SubmitToolApprovalAction>(run.requiredAction, "submit_tool_approval")
+    //     ) {
+    //         const toolCalls = run.requiredAction.submitToolApproval.toolCalls;
+
+    //         if (!toolCalls?.length) {
+    //             console.log("No tool calls provided - cancelling run");
+    //             await client.runs.cancel(thread.id, run.id);
+    //             break;
+    //         }
+
+    //         const toolApprovals: ToolApproval[] = [];
+
+    //         for (const toolCall of toolCalls) {
+    //             console.log(`Approving tool call: ${JSON.stringify(toolCall)}`);
+    //             if (isOutputOfType<RequiredMcpToolCall>(toolCall, "mcp")) {
+    //                 toolApprovals.push({
+    //                     toolCallId: toolCall.id,
+    //                     approve: true,
+    //                     headers: {
+    //                         "SuperSecret": "123456"
+    //                     },
+    //                 });
+    //             }
+    //         }
+
+    //         console.log(`Tool approvals: ${JSON.stringify(toolApprovals)}`);
+    //         if (toolApprovals.length > 0) {
+    //             await client.runs.submitToolOutputs(thread.id, run.id, [], {
+    //                 toolApprovals: toolApprovals,
+    //             });
+    //         }
+    //     }
+    // }
+
+    // console.log(`Current run status: ${run.status}`);
+    // if (run.status === "failed") {
+    //     console.log(`Run failed: ${JSON.stringify(run.lastError)}`);
+    // }
+
+    // // Display run steps and tool calls
+    // const runStepsIterator = client.runSteps.list(thread.id, run.id);
+    // console.log("\nRun Steps:");
+
+    // for await (const step of runStepsIterator) {
+    //     console.log(`Step ${step.id} status: ${step.status}`);
+
+    //     // Check if there are tool calls in the step details
+    //     if (isOutputOfType<RunStepToolCallDetails>(step.stepDetails, "tool_calls")) {
+    //         const toolCalls = step.stepDetails.toolCalls;
+
+    //         console.log("  MCP Tool calls:");
+    //         for (const call of toolCalls) {
+    //             console.log(`Tool Call ID: ${call.id}`);
+    //             console.log(`Type: ${call.type}`);
+    //         }
+    //     }
+    // }
+
+
+    // // Fetch and log all messages
+    // console.log("\nConversation:");
+    // console.log("-".repeat(50));
+
+    // const messagesIterator = client.messages.list(thread.id, { order: "desc" });
+    // const m = await messagesIterator.next();
+    // console.log(`Message: ${JSON.stringify(m)}`);
+    // const content = m.value.content;
+    // let textValue = "";
+    // let citationTexts: string[] = [];
+    // if (Array.isArray(content) && content.length > 0 && content[0].type === "text") {
+    //     textValue = content[0].text.value;
+    //     // If there are annotations, try to extract all citations
+    //     if (content[0].text.annotations && content[0].text.annotations.length > 0) {
+    //         const citations = content[0].text.annotations.filter((a: any) => a.type === "url_citation" && a.urlCitation);
+    //         citationTexts = citations.map((citation: any) => `Source: [${citation.urlCitation.title}](${citation.urlCitation.url})`);
+    //     }
+    // } else {
+    //     textValue = typeof content === "string" ? content : JSON.stringify(content);
+    // }
+    // console.log(`Agent response: ${textValue}`);
+    // await context.sendActivity(textValue)
+
+    // streaming return results
+    context.streamingResponse.setDelayInMs(500)
+    context.streamingResponse.setFeedbackLoop(true)
+    context.streamingResponse.setSensitivityLabel({ type: 'https://schema.org/Message', '@type': 'CreativeWork', name: 'Internal' })
+    context.streamingResponse.setGeneratedByAILabel(true)
+    await context.streamingResponse.queueInformativeUpdate('starting streaming response')
+
+    const streamEventMessages = await client.runs.create(thread.id, agentId, {
         toolResources: toolSet.toolResources,
-    });
-    console.log(`Created run, run ID: ${run.id}`);
-    
-    // Poll the run status
-    while (
-        run.status === "queued" ||
-        run.status === "in_progress" ||
-        run.status === "requires_action"
-    ) {
-        await sleep(1000);
-        run = await client.runs.get(thread.id, run.id);
+    }).stream();
 
-        if (
-            run.status === "requires_action" &&
-            run.requiredAction &&
-            isOutputOfType<SubmitToolApprovalAction>(run.requiredAction, "submit_tool_approval")
-        ) {
-            const toolCalls = run.requiredAction.submitToolApproval.toolCalls;
-
-            if (!toolCalls?.length) {
-                console.log("No tool calls provided - cancelling run");
-                await client.runs.cancel(thread.id, run.id);
-                break;
-            }
-
-            const toolApprovals: ToolApproval[] = [];
-
-            for (const toolCall of toolCalls) {
-                console.log(`Approving tool call: ${JSON.stringify(toolCall)}`);
-                if (isOutputOfType<RequiredMcpToolCall>(toolCall, "mcp")) {
-                    toolApprovals.push({
-                        toolCallId: toolCall.id,
-                        approve: true,
-                        headers: {
-                            "SuperSecret": "123456"
-                        },
-                    });
+    for await (const eventMessage of streamEventMessages) {
+        switch (eventMessage.event) {
+            case RunStreamEvent.ThreadRunCreated:
+                {
+                    const threadRun = eventMessage.data as ThreadRun;
+                    console.log(`ThreadRun status: ${threadRun.status}`);
                 }
-            }
+                break;
+            case MessageStreamEvent.ThreadMessageDelta:
+                {
+                    const messageDelta = eventMessage.data as MessageDeltaChunk;
+                    if (messageDelta.delta && messageDelta.delta.content) {
+                        messageDelta.delta.content.forEach((contentPart) => {
+                            if (contentPart.type === "text") {
+                                const textContent = contentPart as MessageDeltaTextContent;
+                                const textValue = textContent.text?.value || "";
+                                console.log(`Text delta received:: ${textValue}`);
+                                if (textValue && textValue.trim().length > 0) {
+                                    context.streamingResponse.queueChunk(textValue);
+                                }
+                            }
+                        });
+                    }
+                }
+                break;
 
-            console.log(`Tool approvals: ${JSON.stringify(toolApprovals)}`);
-            if (toolApprovals.length > 0) {
-                await client.runs.submitToolOutputs(thread.id, run.id, [], {
-                    toolApprovals: toolApprovals,
-                });
-            }
+            case RunStreamEvent.ThreadRunCompleted:
+                console.log("Thread Run Completed");
+                break;
+            case ErrorEvent.Error:
+                console.log(`An error occurred. Data ${eventMessage.data}`);
+                break;
+            case DoneEvent.Done:
+                console.log("Stream completed.");
+                break;
+            default:
+                console.log(`Unknown event: ${eventMessage.event}`);
+                break;
         }
     }
 
-    console.log(`Current run status: ${run.status}`);
-    if (run.status === "failed") {
-        console.log(`Run failed: ${JSON.stringify(run.lastError)}`);
-    }
+    await context.streamingResponse.endStream()
 
-    // Display run steps and tool calls
-    const runStepsIterator = client.runSteps.list(thread.id, run.id);
-    console.log("\nRun Steps:");
-
-    for await (const step of runStepsIterator) {
-        console.log(`Step ${step.id} status: ${step.status}`);
-
-        // Check if there are tool calls in the step details
-        if (isOutputOfType<RunStepToolCallDetails>(step.stepDetails, "tool_calls")) {
-            const toolCalls = step.stepDetails.toolCalls;
-
-            console.log("  MCP Tool calls:");
-            for (const call of toolCalls) {
-                console.log(`Tool Call ID: ${call.id}`);
-                console.log(`Type: ${call.type}`);
-            }
-        }
-    }
-
-    
-    // Fetch and log all messages
-    console.log("\nConversation:");
-    console.log("-".repeat(50));
-
-    const messagesIterator = client.messages.list(thread.id, { order: "desc" });
-    const m = await messagesIterator.next();
-    console.log(`Message: ${JSON.stringify(m)}`);
-    const content = m.value.content;
-    let textValue = "";
-    let citationTexts: string[] = [];
-    if (Array.isArray(content) && content.length > 0 && content[0].type === "text") {
-        textValue = content[0].text.value;
-        // If there are annotations, try to extract all citations
-        if (content[0].text.annotations && content[0].text.annotations.length > 0) {
-            const citations = content[0].text.annotations.filter((a: any) => a.type === "url_citation" && a.urlCitation);
-            citationTexts = citations.map((citation: any) => `Source: [${citation.urlCitation.title}](${citation.urlCitation.url})`);
-        }
-    } else {
-        textValue = typeof content === "string" ? content : JSON.stringify(content);
-    }
-    console.log(`Agent response: ${textValue}`);
-    await context.sendActivity(textValue)
 
     //await context.sendActivity(`[${count}] echoing: ${context.activity.text}`)
 })
