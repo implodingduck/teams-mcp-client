@@ -354,7 +354,17 @@ agentApp.onActivity(ActivityTypes.Message, async (context: TurnContext, state: A
     const m = await messagesIterator.next();
     console.log(`Message: ${JSON.stringify(m)}`);
     const content = m.value.content;
-    await context.sendActivity(content)
+    if (Array.isArray(content) && content.length > 0 && content[0].type === "text") {
+        textValue = content[0].text.value;
+        // If there are annotations, try to extract all citations
+        if (content[0].text.annotations && content[0].text.annotations.length > 0) {
+            const citations = content[0].text.annotations.filter((a: any) => a.type === "url_citation" && a.urlCitation);
+            citationTexts = citations.map((citation: any) => `Source: [${citation.urlCitation.title}](${citation.urlCitation.url})`);
+        }
+    } else {
+        textValue = typeof content === "string" ? content : JSON.stringify(content);
+    }
+    await context.sendActivity(textValue)
 
     //await context.sendActivity(`[${count}] echoing: ${context.activity.text}`)
 })
