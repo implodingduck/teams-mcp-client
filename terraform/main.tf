@@ -284,6 +284,12 @@ resource "azurerm_role_assignment" "aiuser" {
   principal_id         = azurerm_user_assigned_identity.this.principal_id
 }
 
+resource "azurerm_role_assignment" "cosmosdbreader" {
+  scope                = azurerm_cosmosdb_account.this.id
+  role_definition_name = "Contributor"
+  principal_id         = azurerm_user_assigned_identity.this.principal_id
+}
+
 resource "azurerm_container_app_environment" "this" {
   name                       = "ace-${local.func_name}"
   location                   = azurerm_resource_group.rg.location
