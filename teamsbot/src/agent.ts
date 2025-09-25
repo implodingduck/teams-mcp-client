@@ -25,6 +25,7 @@ import { AgentsClient, ToolSet, isOutputOfType } from "@azure/ai-agents";
 import { AIProjectClient } from "@azure/ai-projects";
 import { DefaultAzureCredential } from "@azure/identity";
 import { stat } from 'fs';
+import { asyncWrapProviders } from 'async_hooks';
 
 // Define the shape of the conversation state
 interface ConversationState {
@@ -254,8 +255,9 @@ const handleStreamingResponse = async (context: TurnContext, state: ApplicationT
                                 const textContent = contentPart as MessageDeltaTextContent;
                                 const textValue = textContent.text?.value;
                                 if (textValue && textValue.trim().length > 0) {
-                                    console.log(`Text delta received:: ${textValue}`);
+                                    //console.log(`Text delta received:: ${textValue}`);
                                     await context.streamingResponse.queueTextChunk(textValue);
+                                    await sleep(500); // slight delay to help ordering
                                 }
                             }
                         });
