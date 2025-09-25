@@ -24,6 +24,7 @@ import {
 import { AgentsClient, ToolSet, isOutputOfType } from "@azure/ai-agents";
 import { AIProjectClient } from "@azure/ai-projects";
 import { DefaultAzureCredential } from "@azure/identity";
+import { Container, CosmosClient, Database, FeedResponse, ItemResponse, SqlQuerySpec } from '@azure/cosmos';
 import { stat } from 'fs';
 import { asyncWrapProviders } from 'async_hooks';
 
@@ -139,11 +140,41 @@ agentApp.onMessage('/runtime', async (context: TurnContext, state: ApplicationTu
     await context.sendActivity(JSON.stringify(runtime))
 })
 
+const initalizeToolSet = async (context: TurnContext, state: ApplicationTurnState) : Promise<ToolSet> => {
+    const cosmosEndpoint = String(process.env['COSMOS_ENDPOINT']);
+    const cosmosDb = String(process.env['COSMOS_DB']);
+
+    const client = new CosmosClient({
+        endpoint: cosmosEndpoint,
+        aadCredentials: new DefaultAzureCredential()
+    });
+    const database = client.database(cosmosDb);
+    const container = database.container('mcpconfigs');
+    const id = context.activity.from?.aadObjectId as string;
+    if (id){
+        let response = await container.item(id).read();
+        if (response.statusCode === 404) {
+            // Item not found, create a new one
+            const newItem = {
+                id: id,
+                servers: []
+            }
+            response = await container.items.create(newItem);
+        }
+        console.log(`Cosmos DB read response: ${JSON.stringify(response)}`);
+    }
+    const toolSet = new ToolSet();
+    return toolSet;
+}
+
 
 const initializeAIFoundryAgent = async (context: TurnContext, state: ApplicationTurnState) => {
     const projectEndpoint = String(process.env['AI_FOUNDRY_ENDPOINT']);
     const modelDeploymentName = String(process.env['AI_FOUNDRY_MODEL']);
     const client = new AgentsClient(projectEndpoint, new DefaultAzureCredential());
+
+    await initalizeToolSet(context, state);
+
     const toolSet = new ToolSet();
     toolSet.addMCPTool({
         serverLabel: "github",

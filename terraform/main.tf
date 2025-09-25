@@ -368,6 +368,16 @@ resource "azurerm_container_app" "agent" {
         name = "graph_connectionName"
         value = "graph"
       }
+
+      env {
+        name = "COSMOS_ENDPOINT"
+        value = azurerm_cosmosdb_account.this.endpoint
+      }
+
+      env {
+        name = "COSMOS_DB"
+        value = azurerm_cosmosdb_sql_database.this.name
+      }
       
      
     }

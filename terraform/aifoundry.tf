@@ -41,10 +41,11 @@ resource "azurerm_cognitive_deployment" "aifoundry_deployment_gpt_4o" {
 
   name                 = "gpt-4o"
   cognitive_account_id = azapi_resource.ai_foundry.id
+  rai_policy_name            = "Microsoft.DefaultV2"
 
   sku {
     name     = "GlobalStandard"
-    capacity = 1
+    capacity = 450
   }
 
   model {

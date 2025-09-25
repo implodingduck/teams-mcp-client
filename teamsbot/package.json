@@ -19,6 +19,7 @@
   "dependencies": {
     "@azure/ai-agents": "^1.2.0-beta.1",
     "@azure/ai-projects": "^1.0.0-beta.10",
+    "@azure/cosmos": "^4.5.1",
     "@azure/identity": "^4.10.2",
     "@microsoft/agents-hosting": "^1.0.15",
     "express": "^5.1.0"
