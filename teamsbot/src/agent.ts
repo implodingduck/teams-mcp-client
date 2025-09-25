@@ -254,7 +254,7 @@ const handleStreamingResponse = async (context: TurnContext, state: ApplicationT
                             if (contentPart.type === "text") {
                                 const textContent = contentPart as MessageDeltaTextContent;
                                 const textValue = textContent.text?.value;
-                                if (textValue && textValue.trim().length > 0) {
+                                if (textValue && textValue.length > 0) {
                                     //console.log(`Text delta received:: ${textValue}`);
                                     await context.streamingResponse.queueTextChunk(textValue);
                                     await sleep(500); // slight delay to help ordering
@@ -479,6 +479,7 @@ agentApp.onActivity(ActivityTypes.Message, async (context: TurnContext, state: A
 
     await handleStreamingResponse(context, state, client, streamEventMessages);
 
+    await context.streamingResponse.queueTextChunk("")
     await context.streamingResponse.endStream()
 
 
