@@ -141,8 +141,8 @@ agentApp.onMessage('/runtime', async (context: TurnContext, state: ApplicationTu
 })
 
 const initalizeToolSet = async (context: TurnContext, state: ApplicationTurnState) : Promise<ToolSet> => {
-    const cosmosEndpoint = String(process.env['COSMOS_ENDPOINT']);
-    const cosmosDb = String(process.env['COSMOS_DB']);
+    const cosmosEndpoint = process.env['COSMOS_ENDPOINT'] as string;
+    const cosmosDb = process.env['COSMOS_DB'] as string;
 
     const client = new CosmosClient({
         endpoint: cosmosEndpoint,
@@ -166,6 +166,12 @@ const initalizeToolSet = async (context: TurnContext, state: ApplicationTurnStat
     const toolSet = new ToolSet();
     return toolSet;
 }
+
+agentApp.onMessage('/cosmos', async (context: TurnContext, state: ApplicationTurnState) => {
+    await context.sendActivity('Testing Cosmos DB connection...');
+    await initalizeToolSet(context, state);
+    await context.sendActivity('Cosmos DB connection test completed.');
+})
 
 
 const initializeAIFoundryAgent = async (context: TurnContext, state: ApplicationTurnState) => {
