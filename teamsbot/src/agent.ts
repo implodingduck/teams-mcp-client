@@ -317,10 +317,18 @@ agentApp.onActivity(ActivityTypes.Message, async (context: TurnContext, state: A
     let count = state.conversation.count ?? 0
     state.conversation.count = ++count
 
+    context.streamingResponse.setDelayInMs(500)
+    context.streamingResponse.setFeedbackLoop(true)
+    context.streamingResponse.setSensitivityLabel({ type: 'https://schema.org/Message', '@type': 'CreativeWork', name: 'Internal' })
+    context.streamingResponse.setGeneratedByAILabel(true)
+    
+    await context.streamingResponse.queueInformativeUpdate('starting streaming response')
+
     let agentId = state.conversation.agentId;
     let toolSet = state.conversation.toolSet;
     if (!agentId) {
         console.log('No agent found for this conversation, creating one...')
+        await context.streamingResponse.queueInformativeUpdate('No agent found for this conversation, creating one...')
         const initArr = await initializeAIFoundryAgent(context, state);
         agentId = initArr.agentId;
         toolSet = initArr.toolSet;
@@ -341,7 +349,7 @@ agentApp.onActivity(ActivityTypes.Message, async (context: TurnContext, state: A
     }
 
     // Create thread for communication
-
+    await context.streamingResponse.queueInformativeUpdate('Starting thread...')
 
     const thread = (state.conversation.threadId)
         ? await client.threads.get(state.conversation.threadId)
@@ -463,11 +471,7 @@ agentApp.onActivity(ActivityTypes.Message, async (context: TurnContext, state: A
     // await context.sendActivity(textValue)
 
     // streaming return results
-    context.streamingResponse.setFeedbackLoop(true)
-    context.streamingResponse.setSensitivityLabel({ type: 'https://schema.org/Message', '@type': 'CreativeWork', name: 'Internal' })
-    context.streamingResponse.setGeneratedByAILabel(true)
-    
-    await context.streamingResponse.queueInformativeUpdate('starting streaming response')
+    await context.streamingResponse.queueInformativeUpdate('Running thread...')
 
     let streamEventMessages = await client.runs.create(thread.id, agentId, {
         toolResources: toolSet.toolResources,
