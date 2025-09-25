@@ -140,28 +140,36 @@ agentApp.onMessage('/runtime', async (context: TurnContext, state: ApplicationTu
     await context.sendActivity(JSON.stringify(runtime))
 })
 
-const initalizeToolSet = async (context: TurnContext, state: ApplicationTurnState) : Promise<ToolSet> => {
+const initalizeToolSet = async (context: TurnContext, state: ApplicationTurnState): Promise<ToolSet> => {
     const cosmosEndpoint = process.env['COSMOS_ENDPOINT'] as string;
     const cosmosDb = process.env['COSMOS_DB'] as string;
 
-    const client = new CosmosClient({
-        endpoint: cosmosEndpoint,
-        aadCredentials: new DefaultAzureCredential()
-    });
-    const database = client.database(cosmosDb);
-    const container = database.container('mcpconfigs');
-    const id = context.activity.from?.aadObjectId as string;
-    if (id){
-        let response = await container.item(id).read();
-        if (response.statusCode === 404) {
-            // Item not found, create a new one
-            const newItem = {
-                id: id,
-                servers: []
+    console.log(`Trying to connect to Cosmos DB at ${cosmosEndpoint}, database ${cosmosDb}`);
+    try {
+        const credential = new DefaultAzureCredential();
+        console.log(`Using DefaultAzureCredential: ${JSON.stringify(credential)}`);
+        const client = new CosmosClient({
+            endpoint: cosmosEndpoint,
+            aadCredentials: credential
+        });
+        const database = client.database(cosmosDb);
+        const container = database.container('mcpconfigs');
+        const id = context.activity.from?.aadObjectId as string;
+        if (id) {
+            let response = await container.item(id).read();
+            if (response.statusCode === 404) {
+                // Item not found, create a new one
+                const newItem = {
+                    id: id,
+                    servers: []
+                }
+                response = await container.items.create(newItem);
             }
-            response = await container.items.create(newItem);
+            console.log(`Cosmos DB read response: ${JSON.stringify(response)}`);
         }
-        console.log(`Cosmos DB read response: ${JSON.stringify(response)}`);
+    } catch (error) {
+        console.error(`Error connecting to Cosmos DB: ${error}`);
+
     }
     const toolSet = new ToolSet();
     return toolSet;
@@ -169,7 +177,7 @@ const initalizeToolSet = async (context: TurnContext, state: ApplicationTurnStat
 
 agentApp.onMessage('/cosmos', async (context: TurnContext, state: ApplicationTurnState) => {
     await context.sendActivity('Testing Cosmos DB connection...');
-    await initalizeToolSet(context, state);
+    const toolset = await initalizeToolSet(context, state);
     await context.sendActivity('Cosmos DB connection test completed.');
 })
 
@@ -326,7 +334,7 @@ const handleStreamingResponse = async (context: TurnContext, state: ApplicationT
                         // Resubmit the tool approvals and continue streaming
                         let submitToolStream = await client.runs.submitToolOutputs(threadRun.threadId, threadRun.id, [], {
                             toolApprovals: toolApprovals,
-                        }).stream();   
+                        }).stream();
                         // Recursively handle the new stream of events from submitting tool outputs
                         await handleStreamingResponse(context, state, client, submitToolStream);
                     }
@@ -358,7 +366,7 @@ agentApp.onActivity(ActivityTypes.Message, async (context: TurnContext, state: A
     context.streamingResponse.setFeedbackLoop(true)
     context.streamingResponse.setSensitivityLabel({ type: 'https://schema.org/Message', '@type': 'CreativeWork', name: 'Internal' })
     context.streamingResponse.setGeneratedByAILabel(true)
-    
+
     await context.streamingResponse.queueInformativeUpdate('starting streaming response')
 
     let agentId = state.conversation.agentId;
