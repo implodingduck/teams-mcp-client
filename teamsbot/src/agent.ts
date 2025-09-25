@@ -354,6 +354,8 @@ agentApp.onActivity(ActivityTypes.Message, async (context: TurnContext, state: A
     const m = await messagesIterator.next();
     console.log(`Message: ${JSON.stringify(m)}`);
     const content = m.value.content;
+    let textValue = "";
+    let citationTexts: string[] = [];
     if (Array.isArray(content) && content.length > 0 && content[0].type === "text") {
         textValue = content[0].text.value;
         // If there are annotations, try to extract all citations
