@@ -366,6 +366,7 @@ agentApp.onActivity(ActivityTypes.Message, async (context: TurnContext, state: A
     } else {
         textValue = typeof content === "string" ? content : JSON.stringify(content);
     }
+    console.log(`Agent response: ${textValue}`);
     await context.sendActivity(textValue)
 
     //await context.sendActivity(`[${count}] echoing: ${context.activity.text}`)
