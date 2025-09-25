@@ -161,14 +161,15 @@ const initializeAIFoundryAgent = async (context: TurnContext, state: Application
     console.log(`Created agent, agent ID : ${agent.id}`);
     state.conversation.agentId = agent.id;
     state.conversation.toolSet = toolSet;
+    return { agentId: agent.id, toolSet: toolSet };
 }
 
 // Welcome message when a new member is added to the conversation
 // using this to signal the initial start of the bot
 agentApp.onConversationUpdate('membersAdded', async (context: TurnContext, state: ApplicationTurnState) => {
-    await initializeAIFoundryAgent(context, state);
-    await context.sendActivity(MessageFactory.suggestedActions(["Please summarize the Azure REST API specifications Readme and Give me the Azure CLI commands to create an Azure Container App with a managed identity"], 'Hello from the Teams MCP Client running Agents SDK version: ' + version ));
+    //await context.sendActivity(MessageFactory.suggestedActions(["Please summarize the Azure REST API specifications Readme and Give me the Azure CLI commands to create an Azure Container App with a managed identity"], 'Hello from the Teams MCP Client running Agents SDK version: ' + version ));
     //await status(context, state)
+    console.log('Member added to conversation...')
 })
 
 const removeFoundryAgent = async (context: TurnContext, state: ApplicationTurnState) => {
@@ -233,7 +234,14 @@ agentApp.onActivity(ActivityTypes.Message, async (context: TurnContext, state: A
     let count = state.conversation.count ?? 0
     state.conversation.count = ++count
 
-    const agentId = state.conversation.agentId;
+    let agentId = state.conversation.agentId;
+    let toolSet = state.conversation.toolSet;
+    if (!agentId) {
+        console.log('No agent found for this conversation, creating one...')
+        const initArr = await initializeAIFoundryAgent(context, state);
+        agentId = initArr.agentId;
+        toolSet = initArr.toolSet;
+    }
     const projectEndpoint = String(process.env['AI_FOUNDRY_ENDPOINT']);
     const modelDeploymentName = String(process.env['AI_FOUNDRY_MODEL']);
     const client = new AgentsClient(projectEndpoint, new DefaultAzureCredential());
@@ -243,7 +251,7 @@ agentApp.onActivity(ActivityTypes.Message, async (context: TurnContext, state: A
         return;
     }
 
-    const toolSet = state.conversation.toolSet;
+    
     if (!toolSet) {
         await context.sendActivity('No toolset found for this conversation. Please start a new conversation.')
         return;
