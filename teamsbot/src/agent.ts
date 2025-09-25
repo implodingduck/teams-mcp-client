@@ -12,6 +12,8 @@ import {
     ThreadMessage,
     ToolApproval,
     RunStepToolCallDetails,
+    DoneEvent,
+    ErrorEvent,
     MessageStreamEvent,
     RunStreamEvent,
     type ThreadRun,
@@ -413,7 +415,7 @@ agentApp.onActivity(ActivityTypes.Message, async (context: TurnContext, state: A
                                 const textValue = textContent.text?.value || "";
                                 console.log(`Text delta received:: ${textValue}`);
                                 if (textValue && textValue.trim().length > 0) {
-                                    context.streamingResponse.queueChunk(textValue);
+                                    context.streamingResponse.queueTextChunk(textValue);
                                 }
                             }
                         });
