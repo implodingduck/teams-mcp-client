@@ -387,7 +387,6 @@ agentApp.onActivity(ActivityTypes.Message, async (context: TurnContext, state: A
     // await context.sendActivity(textValue)
 
     // streaming return results
-    context.streamingResponse.setDelayInMs(500)
     context.streamingResponse.setFeedbackLoop(true)
     context.streamingResponse.setSensitivityLabel({ type: 'https://schema.org/Message', '@type': 'CreativeWork', name: 'Internal' })
     context.streamingResponse.setGeneratedByAILabel(true)
@@ -425,6 +424,30 @@ agentApp.onActivity(ActivityTypes.Message, async (context: TurnContext, state: A
             case RunStreamEvent.ThreadRunRequiresAction:
                 const threadRun = eventMessage.data as ThreadRun;
                 console.log(`Thread Run Required Action: ${JSON.stringify(threadRun)}`);
+                if (threadRun.requiredAction && isOutputOfType<SubmitToolApprovalAction>(threadRun.requiredAction, "submit_tool_approval")) {
+                    // Handle the submit_tool_approval action
+                    const toolApprovals: ToolApproval[] = [];
+                    const toolCalls = threadRun.requiredAction.submitToolApproval.toolCalls;
+                    for (const toolCall of toolCalls) {
+                        console.log(`Approving tool call: ${JSON.stringify(toolCall)}`);
+                        if (isOutputOfType<RequiredMcpToolCall>(toolCall, "mcp")) {
+                            toolApprovals.push({
+                                toolCallId: toolCall.id,
+                                approve: true,
+                                headers: {
+                                    "SuperSecret": "123456"
+                                },
+                            });
+                        }
+                    }
+
+                    console.log(`Tool approvals: ${JSON.stringify(toolApprovals)}`);
+                    if (toolApprovals.length > 0) {
+                        await client.runs.submitToolOutputs(thread.id, threadRun.id, [], {
+                            toolApprovals: toolApprovals,
+                        });
+                    }
+                }
                 break;
             case RunStreamEvent.ThreadRunCompleted:
                 console.log("Thread Run Completed");
