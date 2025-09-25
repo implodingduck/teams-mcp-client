@@ -167,7 +167,7 @@ const initializeAIFoundryAgent = async (context: TurnContext, state: Application
 // using this to signal the initial start of the bot
 agentApp.onConversationUpdate('membersAdded', async (context: TurnContext, state: ApplicationTurnState) => {
     await initializeAIFoundryAgent(context, state);
-    await context.sendActivity('Hello from the Teams MCP Client running Agents SDK version: ' + version, "", "Please summarize the Azure REST API specifications Readme and Give me the Azure CLI commands to create an Azure Container App with a managed identity");
+    await context.sendActivity(MessageFactory.suggestedActions(["Please summarize the Azure REST API specifications Readme and Give me the Azure CLI commands to create an Azure Container App with a managed identity"], 'Hello from the Teams MCP Client running Agents SDK version: ' + version ));
     //await status(context, state)
 })
 
@@ -345,28 +345,16 @@ agentApp.onActivity(ActivityTypes.Message, async (context: TurnContext, state: A
         }
     }
 
-    context.streamingResponse.setFeedbackLoop(true)
-    context.streamingResponse.setGeneratedByAILabel(true)
+    
     // Fetch and log all messages
     console.log("\nConversation:");
     console.log("-".repeat(50));
 
-    const messagesIterator = client.messages.list(thread.id);
-    const messages: ThreadMessage[] = [];
-
-    for await (const msg of messagesIterator) {
-        messages.unshift(msg); // Add to beginning to maintain chronological order
-    }
-
-    for (const msg of messages) {
-        const messageContent: MessageContent = msg.content[0];
-        if (isOutputOfType<MessageTextContent>(messageContent, "text")) {
-            console.log(`${msg.role.toUpperCase()}: ${messageContent.text.value}`);
-            await context.streamingResponse.queueTextChunk(messageContent.text.value + "\n")
-            console.log("-".repeat(50));
-        }
-    }
-    await context.streamingResponse.endStream()
+    const messagesIterator = client.messages.list(thread.id, { order: "desc" });
+    const m = await messagesIterator.next();
+    console.log(`Message: ${JSON.stringify(m)}`);
+    const content = m.value.content;
+    await context.sendActivity(content)
 
     //await context.sendActivity(`[${count}] echoing: ${context.activity.text}`)
 })
