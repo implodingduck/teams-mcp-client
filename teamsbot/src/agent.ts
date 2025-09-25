@@ -249,13 +249,13 @@ const handleStreamingResponse = async (context: TurnContext, state: ApplicationT
                 {
                     const messageDelta = eventMessage.data as MessageDeltaChunk;
                     if (messageDelta.delta && messageDelta.delta.content) {
-                        messageDelta.delta.content.forEach((contentPart) => {
+                        messageDelta.delta.content.forEach(async (contentPart) => {
                             if (contentPart.type === "text") {
                                 const textContent = contentPart as MessageDeltaTextContent;
-                                const textValue = textContent.text?.value || "";
-                                console.log(`Text delta received:: ${textValue}`);
+                                const textValue = textContent.text?.value;
                                 if (textValue && textValue.trim().length > 0) {
-                                    context.streamingResponse.queueTextChunk(textValue);
+                                    console.log(`Text delta received:: ${textValue}`);
+                                    await context.streamingResponse.queueTextChunk(textValue);
                                 }
                             }
                         });
@@ -464,6 +464,7 @@ agentApp.onActivity(ActivityTypes.Message, async (context: TurnContext, state: A
     context.streamingResponse.setFeedbackLoop(true)
     context.streamingResponse.setSensitivityLabel({ type: 'https://schema.org/Message', '@type': 'CreativeWork', name: 'Internal' })
     context.streamingResponse.setGeneratedByAILabel(true)
+    
     await context.streamingResponse.queueInformativeUpdate('starting streaming response')
 
     let streamEventMessages = await client.runs.create(thread.id, agentId, {
