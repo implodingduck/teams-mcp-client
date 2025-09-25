@@ -392,7 +392,7 @@ agentApp.onActivity(ActivityTypes.Message, async (context: TurnContext, state: A
     context.streamingResponse.setGeneratedByAILabel(true)
     await context.streamingResponse.queueInformativeUpdate('starting streaming response')
 
-    const streamEventMessages = await client.runs.create(thread.id, agentId, {
+    let streamEventMessages = await client.runs.create(thread.id, agentId, {
         toolResources: toolSet.toolResources,
     }).stream();
 
@@ -443,9 +443,10 @@ agentApp.onActivity(ActivityTypes.Message, async (context: TurnContext, state: A
 
                     console.log(`Tool approvals: ${JSON.stringify(toolApprovals)}`);
                     if (toolApprovals.length > 0) {
-                        await client.runs.submitToolOutputs(thread.id, threadRun.id, [], {
+                        // Resubmit the tool approvals and continue streaming
+                        streamEventMessages = await client.runs.submitToolOutputs(thread.id, threadRun.id, [], {
                             toolApprovals: toolApprovals,
-                        });
+                        }).stream();   
                     }
                 }
                 break;
