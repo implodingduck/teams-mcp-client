@@ -19,6 +19,7 @@ import {
     type ThreadRun,
     type MessageDeltaChunk,
     type MessageDeltaTextContent,
+    AgentEventMessageStream,
 } from "@azure/ai-agents";
 import { AgentsClient, ToolSet, isOutputOfType } from "@azure/ai-agents";
 import { AIProjectClient } from "@azure/ai-projects";
@@ -235,6 +236,79 @@ async function sleep(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+const handleStreamingResponse = async (context: TurnContext, state: ApplicationTurnState, client: AgentsClient, streamEventMessages: AgentEventMessageStream) => {
+    for await (const eventMessage of streamEventMessages) {
+        switch (eventMessage.event) {
+            case RunStreamEvent.ThreadRunCreated:
+                {
+                    const threadRun = eventMessage.data as ThreadRun;
+                    console.log(`ThreadRun status: ${threadRun.status}`);
+                }
+                break;
+            case MessageStreamEvent.ThreadMessageDelta:
+                {
+                    const messageDelta = eventMessage.data as MessageDeltaChunk;
+                    if (messageDelta.delta && messageDelta.delta.content) {
+                        messageDelta.delta.content.forEach((contentPart) => {
+                            if (contentPart.type === "text") {
+                                const textContent = contentPart as MessageDeltaTextContent;
+                                const textValue = textContent.text?.value || "";
+                                console.log(`Text delta received:: ${textValue}`);
+                                if (textValue && textValue.trim().length > 0) {
+                                    context.streamingResponse.queueTextChunk(textValue);
+                                }
+                            }
+                        });
+                    }
+                }
+                break;
+            case RunStreamEvent.ThreadRunRequiresAction:
+                const threadRun = eventMessage.data as ThreadRun;
+                console.log(`Thread Run Required Action: ${JSON.stringify(threadRun)}`);
+                if (threadRun.requiredAction && isOutputOfType<SubmitToolApprovalAction>(threadRun.requiredAction, "submit_tool_approval")) {
+                    // Handle the submit_tool_approval action
+                    const toolApprovals: ToolApproval[] = [];
+                    const toolCalls = threadRun.requiredAction.submitToolApproval.toolCalls;
+                    for (const toolCall of toolCalls) {
+                        console.log(`Approving tool call: ${JSON.stringify(toolCall)}`);
+                        if (isOutputOfType<RequiredMcpToolCall>(toolCall, "mcp")) {
+                            toolApprovals.push({
+                                toolCallId: toolCall.id,
+                                approve: true,
+                                headers: {
+                                    "SuperSecret": "123456"
+                                },
+                            });
+                        }
+                    }
+
+                    console.log(`Tool approvals: ${JSON.stringify(toolApprovals)}`);
+                    if (toolApprovals.length > 0) {
+                        // Resubmit the tool approvals and continue streaming
+                        let submitToolStream = await client.runs.submitToolOutputs(threadRun.threadId, threadRun.id, [], {
+                            toolApprovals: toolApprovals,
+                        }).stream();   
+                        // Recursively handle the new stream of events from submitting tool outputs
+                        await handleStreamingResponse(context, state, client, submitToolStream);
+                    }
+                }
+                break;
+            case RunStreamEvent.ThreadRunCompleted:
+                console.log("Thread Run Completed");
+                break;
+            case ErrorEvent.Error:
+                console.log(`An error occurred. Data ${eventMessage.data}`);
+                break;
+            case DoneEvent.Done:
+                console.log("Stream completed.");
+                break;
+            default:
+                console.log(`Unknown event: ${eventMessage.event}`);
+                break;
+        }
+    }
+}
+
 // Generic message handler: increments count and echoes the user's message
 agentApp.onActivity(ActivityTypes.Message, async (context: TurnContext, state: ApplicationTurnState) => {
     // Retrieve and increment the conversation message count
@@ -396,74 +470,7 @@ agentApp.onActivity(ActivityTypes.Message, async (context: TurnContext, state: A
         toolResources: toolSet.toolResources,
     }).stream();
 
-    for await (const eventMessage of streamEventMessages) {
-        switch (eventMessage.event) {
-            case RunStreamEvent.ThreadRunCreated:
-                {
-                    const threadRun = eventMessage.data as ThreadRun;
-                    console.log(`ThreadRun status: ${threadRun.status}`);
-                }
-                break;
-            case MessageStreamEvent.ThreadMessageDelta:
-                {
-                    const messageDelta = eventMessage.data as MessageDeltaChunk;
-                    if (messageDelta.delta && messageDelta.delta.content) {
-                        messageDelta.delta.content.forEach((contentPart) => {
-                            if (contentPart.type === "text") {
-                                const textContent = contentPart as MessageDeltaTextContent;
-                                const textValue = textContent.text?.value || "";
-                                console.log(`Text delta received:: ${textValue}`);
-                                if (textValue && textValue.trim().length > 0) {
-                                    context.streamingResponse.queueTextChunk(textValue);
-                                }
-                            }
-                        });
-                    }
-                }
-                break;
-            case RunStreamEvent.ThreadRunRequiresAction:
-                const threadRun = eventMessage.data as ThreadRun;
-                console.log(`Thread Run Required Action: ${JSON.stringify(threadRun)}`);
-                if (threadRun.requiredAction && isOutputOfType<SubmitToolApprovalAction>(threadRun.requiredAction, "submit_tool_approval")) {
-                    // Handle the submit_tool_approval action
-                    const toolApprovals: ToolApproval[] = [];
-                    const toolCalls = threadRun.requiredAction.submitToolApproval.toolCalls;
-                    for (const toolCall of toolCalls) {
-                        console.log(`Approving tool call: ${JSON.stringify(toolCall)}`);
-                        if (isOutputOfType<RequiredMcpToolCall>(toolCall, "mcp")) {
-                            toolApprovals.push({
-                                toolCallId: toolCall.id,
-                                approve: true,
-                                headers: {
-                                    "SuperSecret": "123456"
-                                },
-                            });
-                        }
-                    }
-
-                    console.log(`Tool approvals: ${JSON.stringify(toolApprovals)}`);
-                    if (toolApprovals.length > 0) {
-                        // Resubmit the tool approvals and continue streaming
-                        streamEventMessages = await client.runs.submitToolOutputs(thread.id, threadRun.id, [], {
-                            toolApprovals: toolApprovals,
-                        }).stream();   
-                    }
-                }
-                break;
-            case RunStreamEvent.ThreadRunCompleted:
-                console.log("Thread Run Completed");
-                break;
-            case ErrorEvent.Error:
-                console.log(`An error occurred. Data ${eventMessage.data}`);
-                break;
-            case DoneEvent.Done:
-                console.log("Stream completed.");
-                break;
-            default:
-                console.log(`Unknown event: ${eventMessage.event}`);
-                break;
-        }
-    }
+    await handleStreamingResponse(context, state, client, streamEventMessages);
 
     await context.streamingResponse.endStream()
 
