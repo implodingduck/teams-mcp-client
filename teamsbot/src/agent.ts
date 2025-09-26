@@ -158,8 +158,22 @@ const initalizeToolSet = async (context: TurnContext, state: ApplicationTurnStat
         const id = context.activity.from?.aadObjectId as string;
         if (id) {
             console.log("Trying to read item with id: " + id);
-            let response: ItemResponse<MCPServersDocument> = await container.item(id).read<MCPServersDocument>();
-            console.log(`Cosmos DB read response: ${JSON.stringify(response.item)}`);
+            const querySpec: SqlQuerySpec = {
+                query: "SELECT * FROM c WHERE c.id = @id",
+                parameters: [
+                    {
+                        name: "@id",
+                        value: id
+                    }
+                ]
+            };
+            const { resources }: FeedResponse<MCPServersDocument> = await container.items.query<MCPServersDocument>(querySpec).fetchAll();
+            if (resources.length > 0) {
+                const readItem: MCPServersDocument = resources[0];
+                console.log(`Cosmos DB read response resource: ${JSON.stringify(readItem)}`);
+            } else {
+                console.log(`No item found with id: ${id}`);
+            }
         }
     } catch (error) {
         console.error(`Error connecting to Cosmos DB: ${error}`);
