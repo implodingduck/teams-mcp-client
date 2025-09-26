@@ -146,6 +146,30 @@ const queryCosmosDB = async (id: string): Promise<MCPServersDocument | null> => 
 
 }
 
+const updateCosmosDB = async (item: MCPServersDocument): Promise<void> => {
+    const cosmosEndpoint = process.env['COSMOS_ENDPOINT'] as string;
+    const cosmosDb = process.env['COSMOS_DB'] as string;
+    console.log(`Trying to connect to Cosmos DB at ${cosmosEndpoint}, database ${cosmosDb}`);   
+    try {
+        const credential = new DefaultAzureCredential();
+
+        const client = new CosmosClient({
+            endpoint: cosmosEndpoint,
+            aadCredentials: credential
+        });
+        const database = client.database(cosmosDb);
+        const container = database.container('mcpconfigs');
+        if (item && item.id) {
+            console.log("Trying to upsert item with id: " + item.id);
+            const { resource }: ItemResponse<MCPServersDocument> = await container.items.upsert<MCPServersDocument>(item);
+            console.log(`Cosmos DB upsert response resource: ${JSON.stringify(resource)}`);
+        }
+    } catch (error) {
+        console.error(`Error connecting to Cosmos DB: ${error}`);
+
+    }
+}
+
 const initalizeToolSet = async (context: TurnContext, state: ApplicationTurnState): Promise<ToolSet> => {
 
     const toolSet = new ToolSet();
@@ -231,7 +255,7 @@ agentApp.onActivity(ActivityTypes.EndOfConversation, async (context: TurnContext
 agentApp.onMessage(/^#mcp/, async (context: TurnContext, state: ApplicationTurnState) => {
     const inputTextArr = context.activity?.text?.split(' ')
     if (!inputTextArr || inputTextArr.length < 2) {
-        await context.sendActivity('Usage: #mcp <command>')
+        await context.sendActivity('Usage: #mcp command, for example: #mcp help')
     } else if (inputTextArr.length >= 2) {
         switch (inputTextArr[1]) {
             case 'list':
@@ -241,10 +265,31 @@ agentApp.onMessage(/^#mcp/, async (context: TurnContext, state: ApplicationTurnS
                     return;
                 }
                 
-                await context.sendActivity(`MCP Servers configured for you:\n\n\`\`\`json ${JSON.stringify(readmItem.servers, null, 2)}\n\`\`\``);
+                await context.sendActivity(`MCP Servers configured for you:\n\n\`\`\`json\n${JSON.stringify(readmItem.servers, null, 2)}\n\`\`\``);
+                break;
+            case 'edit':
+                let textToEdit = inputTextArr.slice(2).join(' ');
+                if (!textToEdit || textToEdit.length === 0) {
+                    await context.sendActivity('Usage: #mcp edit [{},{},...], where the array is the full array of MCPServer objects to store in Cosmos DB');
+                    return;
+                }
+                let updateJson = JSON.parse(textToEdit) as MCPServer[];
+                if (!updateJson || updateJson.length === 0) {
+                    await context.sendActivity('No valid JSON array of MCPServer objects found in input.');
+                    return;
+                }
+                const newDoc: MCPServersDocument = {
+                    id: context.activity.from?.aadObjectId as string,
+                    servers: updateJson
+                };
+                await updateCosmosDB(newDoc);
+                await context.sendActivity('MCP server configurations updated successfully.');
+                break;
+            case 'help':
+                await context.sendActivity(`Available commands:\n\n- #mcp help: Show this help message\n- #mcp list: List MCP server configurations associated with your user\n- #mcp edit: Edit MCP server configurations associated with your user. Usage: #mcp edit [{},{},...], where the array is the full array of MCPServer objects to store in Cosmos DB`);
                 break;
             default:
-                await context.sendActivity(`command not recognized. Usage: #mcp <command>`)
+                await context.sendActivity(`command not recognized. Usage: #mcp help`)
                 break;
         }
     }
