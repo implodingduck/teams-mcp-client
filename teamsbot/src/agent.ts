@@ -157,14 +157,6 @@ const initalizeToolSet = async (context: TurnContext, state: ApplicationTurnStat
         const id = context.activity.from?.aadObjectId as string;
         if (id) {
             let response = await container.item(id).read();
-            if (response.statusCode === 404) {
-                // Item not found, create a new one
-                const newItem = {
-                    id: id,
-                    servers: []
-                }
-                response = await container.items.create(newItem);
-            }
             console.log(`Cosmos DB read response: ${JSON.stringify(response)}`);
         }
     } catch (error) {
