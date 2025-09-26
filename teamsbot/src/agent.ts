@@ -27,7 +27,7 @@ import { DefaultAzureCredential } from "@azure/identity";
 import { Container, CosmosClient, Database, FeedResponse, ItemResponse, SqlQuerySpec } from '@azure/cosmos';
 import { stat } from 'fs';
 import { asyncWrapProviders } from 'async_hooks';
-import { MCPServersDocument } from './models';
+import { MCPServer, MCPServersDocument } from './models';
 
 // Define the shape of the conversation state
 interface ConversationState {
@@ -157,8 +157,9 @@ const initalizeToolSet = async (context: TurnContext, state: ApplicationTurnStat
         const container = database.container('mcpconfigs');
         const id = context.activity.from?.aadObjectId as string;
         if (id) {
-            let response = await container.item(id).read<MCPServersDocument>();
-            console.log(`Cosmos DB read response: ${JSON.stringify(response)}`);
+            console.log("Trying to read item with id: " + id);
+            let response: ItemResponse<MCPServersDocument> = await container.item(id).read<MCPServersDocument>();
+            console.log(`Cosmos DB read response: ${JSON.stringify(response.resource)}`);
         }
     } catch (error) {
         console.error(`Error connecting to Cosmos DB: ${error}`);
