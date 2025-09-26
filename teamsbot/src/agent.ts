@@ -159,7 +159,7 @@ const initalizeToolSet = async (context: TurnContext, state: ApplicationTurnStat
         if (id) {
             console.log("Trying to read item with id: " + id);
             let response: ItemResponse<MCPServersDocument> = await container.item(id).read<MCPServersDocument>();
-            console.log(`Cosmos DB read response: ${JSON.stringify(response.resource)}`);
+            console.log(`Cosmos DB read response: ${JSON.stringify(response.item)}`);
         }
     } catch (error) {
         console.error(`Error connecting to Cosmos DB: ${error}`);
