@@ -284,9 +284,9 @@ resource "azurerm_role_assignment" "aiuser" {
   principal_id         = azurerm_user_assigned_identity.this.principal_id
 }
 
-resource "azurerm_role_assignment" "cosmosdbreader" {
+resource "azurerm_role_assignment" "cosmosaccount" {
   scope                = azurerm_cosmosdb_account.this.id
-  role_definition_name = "Contributor"
+  role_definition_name = "Owner"
   principal_id         = azurerm_user_assigned_identity.this.principal_id
 }
 

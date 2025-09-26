@@ -147,7 +147,7 @@ const initalizeToolSet = async (context: TurnContext, state: ApplicationTurnStat
     console.log(`Trying to connect to Cosmos DB at ${cosmosEndpoint}, database ${cosmosDb}`);
     try {
         const credential = new DefaultAzureCredential();
-        console.log(`Using DefaultAzureCredential: ${JSON.stringify(credential)}`);
+        
         const client = new CosmosClient({
             endpoint: cosmosEndpoint,
             aadCredentials: credential
