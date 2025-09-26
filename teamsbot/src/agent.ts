@@ -67,24 +67,6 @@ const status = async (context: TurnContext, state: ApplicationTurnState) => {
     await context.sendActivity(MessageFactory.text(`Token status: Graph:${statusGraph}`))
 }
 
-const base64UrlEncode = (str: string) => {
-    // Encode the string to Base64
-    let base64 = btoa(str);
-    // Replace '+' with '-' and '/' with '_'
-    return base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-}
-
-const base64UrlDecode = (base64Url: string) => {
-    // Replace '-' with '+' and '_' with '/'
-    let base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
-    // Add padding if necessary
-    switch (base64.length % 4) {
-        case 2: base64 += '=='; break;
-        case 3: base64 += '='; break;
-    }
-    return atob(base64); // Decode the Base64 string
-}
-
 agentApp.onMessage('/status', status, ['graph'])
 
 agentApp.onMessage('/me', async (context: TurnContext, state: ApplicationTurnState) => {
@@ -111,19 +93,11 @@ agentApp.onMessage('/reset', async (context: TurnContext, state: ApplicationTurn
 })
 
 
-// Handler for the /count command: replies with the current message count
-agentApp.onMessage('/count', async (context: TurnContext, state: ApplicationTurnState) => {
-    const count = state.conversation.count ?? 0
-    await context.sendActivity(`The conversation count is ${count}`)
-})
-
-
 // Handler for the /diag command: sends the raw activity object for diagnostics
 agentApp.onMessage('/diag', async (context: TurnContext, state: ApplicationTurnState) => {
     await state.load(context, storage)
     await context.sendActivity(JSON.stringify(context.activity))
 })
-
 
 // Handler for the /state command: sends the current state object
 agentApp.onMessage('/state', async (context: TurnContext, state: ApplicationTurnState) => {
@@ -131,31 +105,19 @@ agentApp.onMessage('/state', async (context: TurnContext, state: ApplicationTurn
     await context.sendActivity(JSON.stringify(state))
 })
 
-
-// Handler for the /runtime command: sends Node.js and SDK version info
-agentApp.onMessage('/runtime', async (context: TurnContext, state: ApplicationTurnState) => {
-    const runtime = {
-        nodeversion: process.version,
-        sdkversion: version
-    }
-    await context.sendActivity(JSON.stringify(runtime))
-})
-
-const initalizeToolSet = async (context: TurnContext, state: ApplicationTurnState): Promise<ToolSet> => {
+const queryCosmosDB = async (id: string): Promise<MCPServersDocument | null> => {
     const cosmosEndpoint = process.env['COSMOS_ENDPOINT'] as string;
     const cosmosDb = process.env['COSMOS_DB'] as string;
-    const toolSet = new ToolSet();
     console.log(`Trying to connect to Cosmos DB at ${cosmosEndpoint}, database ${cosmosDb}`);
     try {
         const credential = new DefaultAzureCredential();
-        
+
         const client = new CosmosClient({
             endpoint: cosmosEndpoint,
             aadCredentials: credential
         });
         const database = client.database(cosmosDb);
         const container = database.container('mcpconfigs');
-        const id = context.activity.from?.aadObjectId as string;
         if (id) {
             console.log("Trying to read item with id: " + id);
             const querySpec: SqlQuerySpec = {
@@ -171,13 +133,7 @@ const initalizeToolSet = async (context: TurnContext, state: ApplicationTurnStat
             if (resources.length > 0) {
                 const readItem: MCPServersDocument = resources[0];
                 console.log(`Cosmos DB read response resource: ${JSON.stringify(readItem)}`);
-                for (const server of readItem.servers) {
-                    toolSet.addMCPTool({
-                        serverLabel: server.serverLabel,
-                        serverUrl: server.serverUrl,
-                        allowedTools: server.allowedTools, // Optional: specify allowed tools
-                    });
-                }
+                return readItem;
             } else {
                 console.log(`No item found with id: ${id}`);
             }
@@ -186,17 +142,32 @@ const initalizeToolSet = async (context: TurnContext, state: ApplicationTurnStat
         console.error(`Error connecting to Cosmos DB: ${error}`);
 
     }
-    state.conversation.toolSet = toolSet;
-    
-    return toolSet;
+    return null;
+
 }
 
-agentApp.onMessage('/cosmos', async (context: TurnContext, state: ApplicationTurnState) => {
-    await context.sendActivity('Testing Cosmos DB connection...');
-    const toolset = await initalizeToolSet(context, state);
-    await context.sendActivity('Cosmos DB connection test completed.');
-})
+const initalizeToolSet = async (context: TurnContext, state: ApplicationTurnState): Promise<ToolSet> => {
 
+    const toolSet = new ToolSet();
+
+    const readItem = await queryCosmosDB(context.activity.from?.aadObjectId as string);
+    if (!readItem) {
+        await context.sendActivity('No MCP server configurations found for this user in Cosmos DB.');
+        return toolSet;
+    }
+
+    for (const server of readItem.servers) {
+        toolSet.addMCPTool({
+            serverLabel: server.serverLabel,
+            serverUrl: server.serverUrl,
+            allowedTools: server.allowedTools, // Optional: specify allowed tools
+        });
+    }
+
+    state.conversation.toolSet = toolSet;
+
+    return toolSet;
+}
 
 const initializeAIFoundryAgent = async (context: TurnContext, state: ApplicationTurnState) => {
     const projectEndpoint = String(process.env['AI_FOUNDRY_ENDPOINT']);
@@ -204,20 +175,6 @@ const initializeAIFoundryAgent = async (context: TurnContext, state: Application
     const client = new AgentsClient(projectEndpoint, new DefaultAzureCredential());
 
     const toolSet = await initalizeToolSet(context, state);
-
-    // const toolSet = new ToolSet();
-    // toolSet.addMCPTool({
-    //     serverLabel: "github",
-    //     serverUrl: "https://gitmcp.io/Azure/azure-rest-api-specs",
-    //     allowedTools: ["search_azure_rest_api_code"], // Optional: specify allowed tools
-    // });
-    // // You can also add or remove allowed tools dynamically
-
-    // toolSet.addMCPTool({
-    //     serverLabel: "microsoft_learn",
-    //     serverUrl: "https://learn.microsoft.com/api/mcp",
-    //     allowedTools: ["microsoft_docs_search"], // Optional: specify allowed tools
-    // });
 
     // Create agent with MCP tool
     const agent = await client.createAgent(modelDeploymentName, {
@@ -270,25 +227,24 @@ agentApp.onActivity(ActivityTypes.EndOfConversation, async (context: TurnContext
     await removeFoundryAgent(context, state);
 })
 
-// Handler for activities whose type matches the regex /^message/
-agentApp.onMessage(/^message/, async (context: TurnContext, state: ApplicationTurnState) => {
-    await context.sendActivity(`Matched with regex: ${context.activity.type}`)
-})
-
-// Handler for message who starts with /base64url 
-agentApp.onMessage(/^\/base64url/, async (context: TurnContext, state: ApplicationTurnState) => {
+// Handler for message who starts with #mcp
+agentApp.onMessage(/^#mcp/, async (context: TurnContext, state: ApplicationTurnState) => {
     const inputTextArr = context.activity?.text?.split(' ')
     if (!inputTextArr || inputTextArr.length < 2) {
-        await context.sendActivity('Usage: /base64url <text>')
+        await context.sendActivity('Usage: #mcp <command>')
     } else if (inputTextArr.length >= 2) {
         switch (inputTextArr[1]) {
-            case '-d':
-                const decodedText = base64UrlDecode(inputTextArr.slice(2).join(' '))
-                await context.sendActivity(`Decoded: ${decodedText}`)
+            case 'list':
+                const readmItem = await queryCosmosDB(context.activity.from?.aadObjectId as string);
+                if (!readmItem) {
+                    await context.sendActivity('No MCP server configurations found for this user in Cosmos DB.');
+                    return;
+                }
+                
+                await context.sendActivity(`MCP Servers configured for you:\n\n\`\`\`json ${JSON.stringify(readmItem.servers, null, 2)}\n\`\`\``);
                 break;
             default:
-                const encodedText = base64UrlEncode(inputTextArr.slice(1).join(' '))
-                await context.sendActivity(`Encoded: ${encodedText}`)
+                await context.sendActivity(`command not recognized. Usage: #mcp <command>`)
                 break;
         }
     }
@@ -431,106 +387,6 @@ agentApp.onActivity(ActivityTypes.Message, async (context: TurnContext, state: A
     );
     console.log(`Created message, message ID: ${message.id}`);
 
-    // Non-streaming return results
-    // let run = await client.runs.create(thread.id, agentId, {
-    //     toolResources: toolSet.toolResources,
-    // });
-    // console.log(`Created run, run ID: ${run.id}`);
-
-    // // Poll the run status
-    // while (
-    //     run.status === "queued" ||
-    //     run.status === "in_progress" ||
-    //     run.status === "requires_action"
-    // ) {
-    //     await sleep(1000);
-    //     run = await client.runs.get(thread.id, run.id);
-
-    //     if (
-    //         run.status === "requires_action" &&
-    //         run.requiredAction &&
-    //         isOutputOfType<SubmitToolApprovalAction>(run.requiredAction, "submit_tool_approval")
-    //     ) {
-    //         const toolCalls = run.requiredAction.submitToolApproval.toolCalls;
-
-    //         if (!toolCalls?.length) {
-    //             console.log("No tool calls provided - cancelling run");
-    //             await client.runs.cancel(thread.id, run.id);
-    //             break;
-    //         }
-
-    //         const toolApprovals: ToolApproval[] = [];
-
-    //         for (const toolCall of toolCalls) {
-    //             console.log(`Approving tool call: ${JSON.stringify(toolCall)}`);
-    //             if (isOutputOfType<RequiredMcpToolCall>(toolCall, "mcp")) {
-    //                 toolApprovals.push({
-    //                     toolCallId: toolCall.id,
-    //                     approve: true,
-    //                     headers: {
-    //                         "SuperSecret": "123456"
-    //                     },
-    //                 });
-    //             }
-    //         }
-
-    //         console.log(`Tool approvals: ${JSON.stringify(toolApprovals)}`);
-    //         if (toolApprovals.length > 0) {
-    //             await client.runs.submitToolOutputs(thread.id, run.id, [], {
-    //                 toolApprovals: toolApprovals,
-    //             });
-    //         }
-    //     }
-    // }
-
-    // console.log(`Current run status: ${run.status}`);
-    // if (run.status === "failed") {
-    //     console.log(`Run failed: ${JSON.stringify(run.lastError)}`);
-    // }
-
-    // // Display run steps and tool calls
-    // const runStepsIterator = client.runSteps.list(thread.id, run.id);
-    // console.log("\nRun Steps:");
-
-    // for await (const step of runStepsIterator) {
-    //     console.log(`Step ${step.id} status: ${step.status}`);
-
-    //     // Check if there are tool calls in the step details
-    //     if (isOutputOfType<RunStepToolCallDetails>(step.stepDetails, "tool_calls")) {
-    //         const toolCalls = step.stepDetails.toolCalls;
-
-    //         console.log("  MCP Tool calls:");
-    //         for (const call of toolCalls) {
-    //             console.log(`Tool Call ID: ${call.id}`);
-    //             console.log(`Type: ${call.type}`);
-    //         }
-    //     }
-    // }
-
-
-    // // Fetch and log all messages
-    // console.log("\nConversation:");
-    // console.log("-".repeat(50));
-
-    // const messagesIterator = client.messages.list(thread.id, { order: "desc" });
-    // const m = await messagesIterator.next();
-    // console.log(`Message: ${JSON.stringify(m)}`);
-    // const content = m.value.content;
-    // let textValue = "";
-    // let citationTexts: string[] = [];
-    // if (Array.isArray(content) && content.length > 0 && content[0].type === "text") {
-    //     textValue = content[0].text.value;
-    //     // If there are annotations, try to extract all citations
-    //     if (content[0].text.annotations && content[0].text.annotations.length > 0) {
-    //         const citations = content[0].text.annotations.filter((a: any) => a.type === "url_citation" && a.urlCitation);
-    //         citationTexts = citations.map((citation: any) => `Source: [${citation.urlCitation.title}](${citation.urlCitation.url})`);
-    //     }
-    // } else {
-    //     textValue = typeof content === "string" ? content : JSON.stringify(content);
-    // }
-    // console.log(`Agent response: ${textValue}`);
-    // await context.sendActivity(textValue)
-
     // streaming return results
     await context.streamingResponse.queueInformativeUpdate('Running thread...')
 
@@ -542,7 +398,4 @@ agentApp.onActivity(ActivityTypes.Message, async (context: TurnContext, state: A
 
     await context.streamingResponse.queueTextChunk("")
     await context.streamingResponse.endStream()
-
-
-    //await context.sendActivity(`[${count}] echoing: ${context.activity.text}`)
 })
