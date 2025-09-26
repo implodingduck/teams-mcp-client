@@ -144,7 +144,7 @@ agentApp.onMessage('/runtime', async (context: TurnContext, state: ApplicationTu
 const initalizeToolSet = async (context: TurnContext, state: ApplicationTurnState): Promise<ToolSet> => {
     const cosmosEndpoint = process.env['COSMOS_ENDPOINT'] as string;
     const cosmosDb = process.env['COSMOS_DB'] as string;
-
+    const toolSet = new ToolSet();
     console.log(`Trying to connect to Cosmos DB at ${cosmosEndpoint}, database ${cosmosDb}`);
     try {
         const credential = new DefaultAzureCredential();
@@ -171,6 +171,13 @@ const initalizeToolSet = async (context: TurnContext, state: ApplicationTurnStat
             if (resources.length > 0) {
                 const readItem: MCPServersDocument = resources[0];
                 console.log(`Cosmos DB read response resource: ${JSON.stringify(readItem)}`);
+                for (const server of readItem.servers) {
+                    toolSet.addMCPTool({
+                        serverLabel: server.serverLabel,
+                        serverUrl: server.serverUrl,
+                        allowedTools: server.allowedTools, // Optional: specify allowed tools
+                    });
+                }
             } else {
                 console.log(`No item found with id: ${id}`);
             }
@@ -179,7 +186,8 @@ const initalizeToolSet = async (context: TurnContext, state: ApplicationTurnStat
         console.error(`Error connecting to Cosmos DB: ${error}`);
 
     }
-    const toolSet = new ToolSet();
+    state.conversation.toolSet = toolSet;
+    
     return toolSet;
 }
 
@@ -195,21 +203,21 @@ const initializeAIFoundryAgent = async (context: TurnContext, state: Application
     const modelDeploymentName = String(process.env['AI_FOUNDRY_MODEL']);
     const client = new AgentsClient(projectEndpoint, new DefaultAzureCredential());
 
-    //await initalizeToolSet(context, state);
+    const toolSet = await initalizeToolSet(context, state);
 
-    const toolSet = new ToolSet();
-    toolSet.addMCPTool({
-        serverLabel: "github",
-        serverUrl: "https://gitmcp.io/Azure/azure-rest-api-specs",
-        allowedTools: ["search_azure_rest_api_code"], // Optional: specify allowed tools
-    });
-    // You can also add or remove allowed tools dynamically
+    // const toolSet = new ToolSet();
+    // toolSet.addMCPTool({
+    //     serverLabel: "github",
+    //     serverUrl: "https://gitmcp.io/Azure/azure-rest-api-specs",
+    //     allowedTools: ["search_azure_rest_api_code"], // Optional: specify allowed tools
+    // });
+    // // You can also add or remove allowed tools dynamically
 
-    toolSet.addMCPTool({
-        serverLabel: "microsoft_learn",
-        serverUrl: "https://learn.microsoft.com/api/mcp",
-        allowedTools: ["microsoft_docs_search"], // Optional: specify allowed tools
-    });
+    // toolSet.addMCPTool({
+    //     serverLabel: "microsoft_learn",
+    //     serverUrl: "https://learn.microsoft.com/api/mcp",
+    //     allowedTools: ["microsoft_docs_search"], // Optional: specify allowed tools
+    // });
 
     // Create agent with MCP tool
     const agent = await client.createAgent(modelDeploymentName, {
