@@ -378,6 +378,11 @@ resource "azurerm_container_app" "agent" {
         name = "COSMOS_DB"
         value = azurerm_cosmosdb_sql_database.this.name
       }
+
+      env {
+        name = "MCP_LABBY_KEY"
+        value = var.mcp_labby_key
+      }
       
      
     }

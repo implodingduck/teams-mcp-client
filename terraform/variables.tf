@@ -17,3 +17,8 @@ variable "bot_tenant_id" {
   sensitive = true
   
 }
+
+variable "mcp_labby_key" {
+  type = string
+  sensitive = true
+}

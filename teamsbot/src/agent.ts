@@ -235,6 +235,9 @@ const removeFoundryAgent = async (context: TurnContext, state: ApplicationTurnSt
 
     try {
         await client.deleteAgent(agentId);
+        state.conversation.agentId = undefined;
+        state.conversation.threadId = undefined;
+        state.conversation.toolSet = undefined;
         console.log(`Deleted agent, agent ID : ${agentId}`);
     } catch (error) {
         console.error(`Failed to delete agent, agent ID : ${agentId}`, error);
@@ -284,6 +287,7 @@ agentApp.onMessage(/^#mcp/, async (context: TurnContext, state: ApplicationTurnS
                 };
                 await updateCosmosDB(newDoc);
                 await context.sendActivity('MCP server configurations updated successfully.');
+                await removeFoundryAgent(context, state);
                 break;
             case 'help':
                 await context.sendActivity(`Available commands:\n\n- #mcp help: Show this help message\n- #mcp list: List MCP server configurations associated with your user\n- #mcp edit: Edit MCP server configurations associated with your user. Usage: #mcp edit [{},{},...], where the array is the full array of MCPServer objects to store in Cosmos DB`);
@@ -335,13 +339,20 @@ const handleStreamingResponse = async (context: TurnContext, state: ApplicationT
                     const toolCalls = threadRun.requiredAction.submitToolApproval.toolCalls;
                     for (const toolCall of toolCalls) {
                         console.log(`Approving tool call: ${JSON.stringify(toolCall)}`);
+                        let headers: Record<string,string> = {
+                            "SuperSecret": "123456"
+                        }
                         if (isOutputOfType<RequiredMcpToolCall>(toolCall, "mcp")) {
+                            if(toolCall.serverLabel === "labby"){
+                                // TODO make this dynamic by looking up the serverLabel in cosmos db for this user
+                                headers = {
+                                    "Ocp-Apim-Subscription-Key": process.env['MCP_LABBY_KEY'] || "",
+                                }
+                            }
                             toolApprovals.push({
                                 toolCallId: toolCall.id,
                                 approve: true,
-                                headers: {
-                                    "SuperSecret": "123456"
-                                },
+                                headers: headers,
                             });
                         }
                     }
