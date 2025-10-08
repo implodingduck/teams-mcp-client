@@ -199,20 +199,26 @@ const initializeAIFoundryAgent = async (context: TurnContext, state: Application
     const client = new AgentsClient(projectEndpoint, new DefaultAzureCredential());
 
     const toolSet = await initalizeToolSet(context, state);
-
-    // Create agent with MCP tool
-    const agent = await client.createAgent(modelDeploymentName, {
-        // name formated as YYYY-MM-DD-HH-mm
-        name: `teams-agent-${new Date().toISOString().replace(/[:.]/g, '-')}`,
-        instructions:
-            "You are a helpful agent that can use MCP tools to assist users. Use the available MCP tools to answer questions and perform tasks.",
-        // tools: mcpTools.map((tool) => tool.definition),
-        tools: toolSet.toolDefinitions,
-    });
-    console.log(`Created agent, agent ID : ${agent.id}`);
-    state.conversation.agentId = agent.id;
-    state.conversation.toolSet = toolSet;
-    return { agentId: agent.id, toolSet: toolSet };
+    try {
+        console.log(`attempting to create agent with tools: ${JSON.stringify(toolSet.toolDefinitions)}`);
+        // Create agent with MCP tool
+        const agent = await client.createAgent(modelDeploymentName, {
+            // name formated as YYYY-MM-DD-HH-mm
+            name: `teams-agent-${new Date().toISOString().replace(/[:.]/g, '-')}`,
+            instructions:
+                "You are a helpful agent that can use MCP tools to assist users. Use the available MCP tools to answer questions and perform tasks.",
+            // tools: mcpTools.map((tool) => tool.definition),
+            tools: toolSet.toolDefinitions,
+        });
+        console.log(`Created agent, agent ID : ${agent.id}`);
+        state.conversation.agentId = agent.id;
+        state.conversation.toolSet = toolSet;
+        return { agentId: agent.id, toolSet: toolSet };
+    } catch (error) {
+        console.error('Failed to create agent', error);
+        await context.sendActivity('Error: Unable to create agent. Please try again later.');
+        return { agentId: undefined, toolSet: toolSet };
+    }
 }
 
 // Welcome message when a new member is added to the conversation
