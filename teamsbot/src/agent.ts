@@ -354,8 +354,10 @@ const handleStreamingResponse = async (context: TurnContext, state: ApplicationT
                 }
                 break;
             case RunStepStreamEvent.ThreadRunStepDelta:
-                const tr = eventMessage.data as ThreadRun;
-                console.log(`Thread Run Step Delta: ${JSON.stringify(tr)}`);
+                console.log(`${eventMessage.event}: Thread Run Step Delta: ${JSON.stringify(eventMessage.data)}`);
+                break;
+            case RunStepStreamEvent.ThreadRunStepCompleted:
+                console.log(`${eventMessage.event}: Thread Run Step Completed: ${JSON.stringify(eventMessage.data)}`);
                 break;
             case RunStreamEvent.ThreadRunRequiresAction:
                 const threadRun = eventMessage.data as ThreadRun;
