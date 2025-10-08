@@ -16,6 +16,7 @@ import {
     ErrorEvent,
     MessageStreamEvent,
     RunStreamEvent,
+    RunStepStreamEvent,
     type ThreadRun,
     type MessageDeltaChunk,
     type MessageDeltaTextContent,
@@ -28,6 +29,7 @@ import { Container, CosmosClient, Database, FeedResponse, ItemResponse, SqlQuery
 import { stat } from 'fs';
 import { asyncWrapProviders } from 'async_hooks';
 import { MCPServer, MCPServersDocument } from './models';
+import { threadMessageArrayDeserializer } from '@azure/ai-agents/dist/commonjs/models/models';
 
 // Define the shape of the conversation state
 interface ConversationState {
@@ -325,6 +327,7 @@ async function sleep(ms: number): Promise<void> {
 
 const handleStreamingResponse = async (context: TurnContext, state: ApplicationTurnState, client: AgentsClient, streamEventMessages: AgentEventMessageStream) => {
     for await (const eventMessage of streamEventMessages) {
+        
         switch (eventMessage.event) {
             case RunStreamEvent.ThreadRunCreated:
                 {
@@ -349,6 +352,10 @@ const handleStreamingResponse = async (context: TurnContext, state: ApplicationT
                         });
                     }
                 }
+                break;
+            case RunStepStreamEvent.ThreadRunStepDelta:
+                const tr = eventMessage.data as ThreadRun;
+                console.log(`Thread Run Step Delta: ${JSON.stringify(tr)}`);
                 break;
             case RunStreamEvent.ThreadRunRequiresAction:
                 const threadRun = eventMessage.data as ThreadRun;
