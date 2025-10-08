@@ -18,6 +18,7 @@ import {
     RunStreamEvent,
     RunStepStreamEvent,
     type ThreadRun,
+    type RunStep,
     type MessageDeltaChunk,
     type MessageDeltaTextContent,
     AgentEventMessageStream,
@@ -29,7 +30,7 @@ import { Container, CosmosClient, Database, FeedResponse, ItemResponse, SqlQuery
 import { stat } from 'fs';
 import { asyncWrapProviders } from 'async_hooks';
 import { MCPServer, MCPServersDocument } from './models';
-import { threadMessageArrayDeserializer } from '@azure/ai-agents/dist/commonjs/models/models';
+import { threadMessageArrayDeserializer, ToolOutput } from '@azure/ai-agents/dist/commonjs/models/models';
 
 // Define the shape of the conversation state
 interface ConversationState {
@@ -325,7 +326,7 @@ async function sleep(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-const handleStreamingResponse = async (context: TurnContext, state: ApplicationTurnState, client: AgentsClient, streamEventMessages: AgentEventMessageStream) => {
+const handleStreamingResponse = async (context: TurnContext, state: ApplicationTurnState, client: AgentsClient, streamEventMessages: AgentEventMessageStream, toolsOutput: ToolOutput[] = []) => {
     for await (const eventMessage of streamEventMessages) {
         
         switch (eventMessage.event) {
@@ -355,9 +356,11 @@ const handleStreamingResponse = async (context: TurnContext, state: ApplicationT
                 break;
             case RunStepStreamEvent.ThreadRunStepDelta:
                 console.log(`${eventMessage.event}: Thread Run Step Delta: ${JSON.stringify(eventMessage.data)}`);
+                console.log(`Tools Output so far: ${JSON.stringify(toolsOutput)}`);
                 break;
             case RunStepStreamEvent.ThreadRunStepCompleted:
                 console.log(`${eventMessage.event}: Thread Run Step Completed: ${JSON.stringify(eventMessage.data)}`);
+                console.log(`Tools Output so far: ${JSON.stringify(toolsOutput)}`);
                 break;
             case RunStreamEvent.ThreadRunRequiresAction:
                 const threadRun = eventMessage.data as ThreadRun;
@@ -389,11 +392,12 @@ const handleStreamingResponse = async (context: TurnContext, state: ApplicationT
                     console.log(`Tool approvals: ${JSON.stringify(toolApprovals)}`);
                     if (toolApprovals.length > 0) {
                         // Resubmit the tool approvals and continue streaming
-                        let submitToolStream = await client.runs.submitToolOutputs(threadRun.threadId, threadRun.id, [], {
+                        let toolsOutput: ToolOutput[] = [];
+                        let submitToolStream = await client.runs.submitToolOutputs(threadRun.threadId, threadRun.id, toolsOutput=toolsOutput, {
                             toolApprovals: toolApprovals,
                         }).stream();
                         // Recursively handle the new stream of events from submitting tool outputs
-                        await handleStreamingResponse(context, state, client, submitToolStream);
+                        await handleStreamingResponse(context, state, client, submitToolStream, toolsOutput);
                     }
                 }
                 break;
