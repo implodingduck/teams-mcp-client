@@ -287,6 +287,20 @@ agentApp.onMessage(/^#mcp/, async (context: TurnContext, state: ApplicationTurnS
                     await context.sendActivity('No valid JSON array of MCPServer objects found in input.');
                     return;
                 }
+                
+                let isValid = true;
+                updateJson.map((server) => {
+                    if (!server.serverLabel || !server.serverUrl) {
+                        isValid = false;
+                    }
+                    if (!server.serverLabel.match(/^[a-zA-Z0-9_]+$/)) {
+                        isValid = false;
+                    }
+                });
+                if (!isValid) {
+                    await context.sendActivity('Invalid MCPServer object found in input. Ensure each object has a serverLabel and serverUrl, and that serverLabel contains only letters, numbers, and underscores.');
+                    return;
+                }
                 const newDoc: MCPServersDocument = {
                     id: context.activity.from?.aadObjectId as string,
                     servers: updateJson
